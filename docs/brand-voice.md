@@ -4,13 +4,16 @@
 
 - **Name:** Voodoo Momo
 - **Tagline:** Taste the Himalayan Magic!
-- **Location:** Wagholi, Pune
-- **Type:** Specialty momos — 20+ varieties (Achari, Choila, Chole, and more)
-- **Primary audience:** School and college students, working professionals, families
+- **Location:** Nyati Commercial, Shop No 1, Near JSPM College, Wagholi, Pune
+- **Instagram:** @voodoomomo
+- **Type:** Specialty momos — 20+ varieties (Achari, Choila, Pan-fried, Kurkure, Chilly, and more)
+- **Primary audience:** School and college students (JSPM College proximity is key), working professionals, families
+- **Brand mascot:** A cool panda wearing sunglasses, eating momos from a bowl, set against a Himalayan temple gate with prayer flags. He's the face of the brand — invoke his swagger ("even our panda approves") when humour fits. Use 🐼 emoji when referencing the mascot.
+- **Visual palette:** Warm gold, deep red, orange — posts should complement this palette, not clash with it.
 
 ## Personality
 
-- **Tone:** Warm, fun, street-style — approachable and unpretentious
+- **Tone:** Warm, fun, street-style — approachable and unpretentious, with a cool edge (think: panda in shades, not a polished café chain)
 - **Energy level:** Calm, relaxed mornings; buzzy and high-energy evenings
 - **POV:** First person "we" throughout
 
@@ -25,7 +28,7 @@
 
 - **Length target:** 80–150 chars for feed posts; 200–280 for carousel
 - **Sentence style:** Short declarative sentences; minimal exclamation marks (max 1 per post)
-- **Emoji use:** Max 3 per post; prefer 🥟 🌶️ 🌿 — no generic hearts, fire, or clapping hands
+- **Emoji use:** Max 3 per post; prefer 🥟 🌶️ 🐼 🌿 — 🐼 reserved for mascot/personality moments; no generic hearts, fire, or clapping hands
 - **CTA pattern:** Always end with a soft invite ("Come say hello." / "See you this evening." / "What's your pick?")
 
 ## Hashtag rules
