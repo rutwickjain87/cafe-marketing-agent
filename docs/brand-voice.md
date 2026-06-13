@@ -6,7 +6,7 @@
 - **Tagline:** Taste the Himalayan Magic!
 - **Location:** Nyati Commercial, Shop No 1, Near JSPM College, Wagholi, Pune
 - **Instagram:** @voodoomomo
-- **Type:** Specialty momos — 20+ varieties (Achari, Choila, Pan-fried, Kurkure, Chilly, and more)
+- **Type:** Specialty momos — 31 varieties across 4 categories: Veg (Steam, Fry, Butter Grill, Tandoori, Peri Peri, Chilly, Kurkure, Choila, Achari), Paneer (same 9), Chicken (same 9), Cheese Corn (Steam, Fry, Peri-Peri, Kurkure)
 - **Primary audience:** School and college students (JSPM College proximity is key), working professionals, families
 - **Brand mascot:** A cool panda wearing sunglasses, eating momos from a bowl, set against a Himalayan temple gate with prayer flags. He's the face of the brand — invoke his swagger ("even our panda approves") when humour fits. Use 🐼 emoji when referencing the mascot.
 - **Visual palette:** Warm gold, deep red, orange — posts should complement this palette, not clash with it.
@@ -79,7 +79,7 @@ Come find us in Wagholi this evening.
 ### Good — carousel (multi-variety showcase)
 
 ```
-20 varieties. One Wagholi kitchen.
+31 varieties. One Wagholi kitchen.
 Whether it's an after-college craving or a rainy evening comfort, we've got the momo for the moment.
 What's your go-to? 🌶️
 
