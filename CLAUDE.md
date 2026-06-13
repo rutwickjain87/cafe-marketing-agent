@@ -31,8 +31,8 @@
 ## Phase 0 checklist (current phase)
 
 - [x] Repo skeleton + secret hygiene
-- [ ] `~/.claude/CLAUDE.md` personal preferences
-- [ ] `src/agents/engagement/CLAUDE.md` DM compliance rules (path-scoped)
-- [ ] `.claude/commands/` slash commands wired up
-- [ ] `.claude/settings.json` publish/DM tools denied by default
-- [ ] `@docs/brand-voice.md` brand voice doc created and imported
+- [ ] `~/.claude/CLAUDE.md` personal preferences — **TODO: write personal coding/style prefs**
+- [x] `src/agents/engagement/CLAUDE.md` DM compliance rules (path-scoped)
+- [x] `.claude/commands/` slash commands wired up (`/draft-caption`, `/new-campaign`, `/weekly-report`)
+- [x] `.claude/settings.json` publish/DM tools denied by default
+- [x] `@docs/brand-voice.md` brand voice doc created and imported — **TODO: fill in real cafe details**
