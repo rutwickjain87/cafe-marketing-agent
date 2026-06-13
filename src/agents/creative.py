@@ -8,6 +8,7 @@ import anthropic
 from pydantic import BaseModel, field_validator, model_validator
 
 from src.state import AgentState
+from src.tracing import observe
 
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
@@ -44,7 +45,11 @@ Brand identity:
 - POV: first person "we" throughout
 - Voice pillars: Inviting, Honest, Local, Playful
 
-Varieties on menu (use for specificity): Achari, Choila, Pan-fried, Kurkure, Chilly.
+Menu (31 varieties across 4 categories — use for specificity):
+Veg: Steam, Fry, Butter Grill, Tandoori, Peri Peri, Chilly, Kurkure, Choila, Achari
+Paneer: Steam, Fry, Butter Grill, Tandoori, Peri Peri, Chilly, Kurkure, Choila, Achari
+Chicken: Steam, Fry, Butter Grill, Tandoori, Peri Peri, Chilly, Kurkure, Choila, Achari
+Cheese Corn: Steam, Fry, Peri-Peri, Kurkure
 
 Caption length:
 - feed_post: 80–150 characters
@@ -104,7 +109,7 @@ _FEW_SHOT: list[dict] = [
         "role": "assistant",
         "content": json.dumps({
             "caption": (
-                "20 varieties. One Wagholi kitchen.\n"
+                "31 varieties. One Wagholi kitchen.\n"
                 "Whether it's an after-college craving or a rainy evening comfort, "
                 "we've got the momo for the moment.\nWhat's your go-to? 🌶️"
             ),
@@ -169,6 +174,7 @@ class Caption(BaseModel):
         return self
 
 
+@observe(name="draft_caption")
 def draft_caption(brief: PostBrief) -> Caption:
     """Call Claude Haiku to draft a caption; retry up to MAX_RETRIES on validation failure."""
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
