@@ -35,4 +35,4 @@
 - [x] `src/agents/engagement/CLAUDE.md` DM compliance rules (path-scoped)
 - [x] `.claude/commands/` slash commands wired up (`/draft-caption`, `/new-campaign`, `/weekly-report`)
 - [x] `.claude/settings.json` publish/DM tools denied by default
-- [x] `@docs/brand-voice.md` brand voice doc created and imported — **TODO: fill in real cafe details**
+- [x] `@docs/brand-voice.md` brand voice doc — Voodoo Momo profile complete with few-shot captions
