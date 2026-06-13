@@ -2,9 +2,23 @@
 
 A phase-by-phase execution guide that builds a production marketing agent **and** prepares you for the Claude Certified Architect – Foundations (CCA-F) exam. Every phase lists its tools, exact setup commands, a workflow diagram, validation checks, pitfalls, git hygiene, concept explanations with links, and an infographic where it helps.
 
-> **Rendering note:** the ```mermaid``` blocks below render natively in GitHub and in most Markdown viewers. Keep this file at the repo root so it renders on the repo landing page next to the code.
+> **Rendering note:** the ```mermaid``` blocks below render natively in GitHub and in most Markdown viewers.
 
 **Targets:** ~140 hrs total, 4 weeks at ~35 hrs/week. ~$50–60/mo to run for one cafe.
+
+---
+
+## Progress log (as of 2026-06-14)
+
+Phases 0–6 implemented and wired; first live post published to @voodoomomo. Notable deltas from the original plan:
+
+- **Publishing path pivoted to the Instagram-Login API** (`graph.instagram.com`) instead of the Facebook-Login Graph API. The cafe's Facebook Page uses the New Pages Experience, which rejects user tokens — the Instagram-Login path needs no Page. See [instagram-api-setup.md](instagram-api-setup.md).
+- **Image generation added** (not in the original stack): a Gemini "Nano Banana" node renders post images, reference-guided by the panda mascot for consistency. Requires billing — image models are not on Gemini's free tier.
+- **Supabase wired**: pgvector brand memory, `match_brand_posts` RPC, and a public Storage bucket for post images (Instagram fetches `image_url` server-side, so images must be public JPEGs).
+- **Meta tools call the Graph API directly** (httpx), not via Composio — Composio remains an optional future MCP layer.
+- Menu corrected to **31 varieties** across 4 categories (was "20").
+
+Open hardening: real embeddings in `brand_memory._embed()` (currently a zero-vector placeholder), `store_post()` after publish, and driving publish through the compiled graph's `interrupt_before` gate end-to-end.
 
 ---
 
@@ -82,16 +96,19 @@ git push -u origin main
 ```
 cafe-marketing-agent/
 ├── README.md
-├── schedule.md                    # this file
 ├── CLAUDE.md                      # project memory (Phase 0)
 ├── .claude/{commands/,settings.json}
 ├── .env.example                   # committed; .env is NOT
 ├── src/
-│   ├── graph.py  state.py
+│   ├── graph.py  state.py  tracing.py
 │   ├── agents/{coordinator,strategy,creative,publishing,analytics}.py
 │   ├── agents/engagement/{CLAUDE.md, engagement.py}
-│   ├── tools/meta_graph.py
-│   └── memory/
+│   ├── tools/{meta_graph,image_gen}.py
+│   └── memory/brand_memory.py
+├── db/schema.sql                  # Supabase tables + RPC + RLS
+├── docs/                          # this file + setup guides, roadmap, brand voice
+├── assets/brand/                  # poster, mascot, menu, display pic
+├── scripts/refresh_ig_token.py
 ├── evals/  tests/
 └── .github/workflows/ci.yml
 ```
@@ -111,13 +128,13 @@ cafe-marketing-agent/
 
 ---
 
-## Global prerequisites — Meta account setup (~½ day)
+## Global prerequisites — Instagram account setup (~½ day)
 
-Do before Phase 2; nothing publishes without it.
+Do before Phase 2; nothing publishes without it. Full walkthrough: [instagram-api-setup.md](instagram-api-setup.md).
 
-1. Convert the cafe's Instagram to a **Professional (Business)** account and link it to a **Facebook Page**.
-2. Create a Meta app at https://developers.facebook.com → keep it in **Development mode**.
-3. Add yourself (and your app) a role on the cafe's business assets so you can call the API **without full App Review** (valid for a single owned account; App Review + Business Verification only needed when you productize for clients you don't control).
+1. Convert the cafe's Instagram to a **Professional (Business or Creator)** account. **No Facebook Page required** — we use the Instagram-Login API (`graph.instagram.com`), which avoids the New Pages Experience block that rejects Facebook user tokens. (We learned this the hard way; see the gotchas in the setup guide.)
+2. Create a Meta app at https://developers.facebook.com → add the **Instagram** product → open **"API setup with Instagram login"**; keep it in **Development mode** (app owner/testers get all scopes without App Review).
+3. Run the OAuth flow to mint a 60-day Instagram-Login token plus your Instagram-scoped user ID (the token exchange returns both). Refresh monthly with `scripts/refresh_ig_token.py`.
 
 Concept — why this matters: https://developers.facebook.com/docs/instagram-platform/content-publishing
 

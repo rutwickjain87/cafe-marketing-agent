@@ -16,23 +16,33 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
-      - name: Run tests
+      - name: Run unit tests
         run: pytest tests/ -v
+        env:
+          # Schema/unit tests don't call the API; key is only needed for integration tests
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
-      - name: Run evals
+      - name: Run brand-compliance evals
         run: pytest evals/ -v
-        # informational until Phase 5 — don't block merges yet
+        # Phase 5+: flip continue-on-error to false once eval pass-rate is stable
         continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
 
-  # Phase 6: uncomment to enable Claude Code headless review on PRs.
+  # Phase 6: uncomment to enable Claude Code headless security review on PRs.
+  # Requires ANTHROPIC_API_KEY in repo secrets and claude CLI in PATH.
   # prompt-review:
   #   runs-on: ubuntu-latest
   #   if: github.event_name == 'pull_request'
   #   steps:
   #     - uses: actions/checkout@v4
-  #     - name: Claude Code headless security review
-  #       run: claude --headless "/security-review"
+  #     - name: Install Claude Code CLI
+  #       run: npm install -g @anthropic-ai/claude-code
+  #     - name: Headless security review of tool layer
+  #       run: claude --headless "/security-review src/tools/"
   #       env:
   #         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

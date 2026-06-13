@@ -5,5 +5,7 @@ __pycache__/
 *.pyc
 .venv/
 .langfuse/
+.pytest_cache/
 node_modules/
+.DS_Store
 .claude/settings.local.json
