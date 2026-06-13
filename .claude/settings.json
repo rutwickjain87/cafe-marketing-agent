@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(pip:*)",
+      "Bash(pytest:*)",
+      "Bash(git:*)"
+    ],
+    "deny": [
+      "mcp__composio__meta_publish_media",
+      "mcp__composio__meta_send_dm",
+      "mcp__composio__meta_reply_to_comment",
+      "mcp__composio__meta_create_media_container"
+    ]
+  }
+}
