@@ -266,7 +266,7 @@
   <h3>The intended virtuous cycle</h3>
   <p>Published post + its performance is stored with an embedding; next week's Strategy run retrieves the best-performing similar posts and weights ideas toward what worked.</p>
   <div class="card">
-    <p><span class="pill no">hollow today</span> <code>_embed()</code> returns a zero vector and <code>store_post()</code> isn't called after publish — so the loop doesn't actually learn yet. Wiring a real embedding model + the post-publish write closes it.</p>
+    <p><span class="pill warn">partly wired</span> <code>store_post()</code> now runs after publish, so posts are recorded — but <code>_embed()</code> still returns a zero vector, so semantic retrieval can't rank them yet. Wiring a real embedding model closes the loop. Analytics writeback (metrics onto the post) is still a stub.</p>
   </div>
 </section>
 

@@ -142,6 +142,14 @@ def _handle_response(resp: httpx.Response) -> Union[dict, MetaError]:
         subcode = err.get("error_subcode", 0)
         msg = err.get("message", "Unknown Meta API error")
 
+        # 551 = Instagram messaging window has closed. Map it here, before the
+        # generic API_ERROR — the recovery hint must be "discard", never retry.
+        if code_int == 551:
+            return MetaError(
+                code=MetaErrorCode.DM_WINDOW_EXPIRED,
+                message=msg,
+                recovery="discard_reply_do_not_retry",
+            )
         # 10 = Application doesn't have permission; 200 = Permissions error (OAuthException)
         if code_int in (10, 200) or subcode == 458:
             return MetaError(
@@ -311,15 +319,7 @@ def send_dm_reply(thread_id: str, message: str) -> DmReplyResult | MetaError:
 
     result = _handle_response(resp)
     if isinstance(result, MetaError):
-        return result
-
-    error_data = result.get("error", {})
-    if error_data.get("code") == 551:  # Instagram DM window expired
-        return MetaError(
-            code=MetaErrorCode.DM_WINDOW_EXPIRED,
-            message="24-hour DM window has closed",
-            recovery="discard_reply_do_not_retry",
-        )
+        return result  # incl. DM_WINDOW_EXPIRED, now mapped in _handle_response
     return DmReplyResult(message_id=result.get("message_id", result.get("mid", "")))
 
 

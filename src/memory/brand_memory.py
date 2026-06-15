@@ -12,10 +12,13 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+
+_log = logging.getLogger(__name__)
 
 _SUPABASE_AVAILABLE = False
 
@@ -149,7 +152,10 @@ def find_published_media(post_id: str) -> str | None:
         row = result.data[0] if result.data else None
         if isinstance(row, dict) and row.get("media_id"):
             return str(row["media_id"])
-    except Exception:
+    except Exception as exc:
+        # Fail-open: a fresh publish is acceptable (the DB unique index is the
+        # backstop), but log it — a silent miss here weakens idempotency.
+        _log.warning("idempotency lookup failed for post_id=%s: %s", post_id, exc)
         return None
     return None
 
@@ -182,8 +188,10 @@ def store_post(asset: dict) -> None:
             "embedding": _embed(caption),
             "raw": json.dumps(asset, default=str),
         }).execute()
-    except Exception:
-        pass  # memory write failure must never abort the graph
+    except Exception as exc:
+        # Never abort the graph on a memory write — but do surface it: this row
+        # is also the idempotency record, so a silent failure matters.
+        _log.warning("store_post failed for media_id=%s: %s", media_id, exc)
 
 
 # ---------------------------------------------------------------------------

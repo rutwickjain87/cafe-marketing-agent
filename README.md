@@ -1,6 +1,6 @@
 # Cafe Marketing Agent
 
-AI-powered Instagram marketing automation for an independent cafe (**Voodoo Momo**, Wagholi, Pune), built with LangGraph + Claude. Drafts on-brand captions, generates post images, stages them through a human-approval gate, publishes to Instagram, and handles engagement.
+AI-powered Instagram marketing automation for an independent cafe (**Voodoo Momo**, Wagholi, Pune), built with LangGraph + Claude. Drafts on-brand captions, stages each post behind a human-approval gate, publishes to Instagram, and triages comments/DMs. Image generation (Gemini) and brand memory are wired as supporting tools — see the [production checklist](docs/production-mvp.md) for what's pipeline-wired vs tool-only today.
 
 Doubles as study for the **Claude Certified Architect – Foundations (CCA-F)** exam — each build phase maps to a specific exam domain. See [docs/roadmap.md](docs/roadmap.md) for the domain mapping and [docs/build-schedule.md](docs/build-schedule.md) for the phase-by-phase plan.
 
