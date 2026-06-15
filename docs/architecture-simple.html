@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voodoo Momo — Meet Your AI Marketing Crew</title>
+<style>
+  :root{
+    --gold:#E8A317; --red:#B22222; --orange:#E07B39; --green:#3E7C57;
+    --ink:#2b2118; --cream:#fbf6ec; --card:#fffdf8; --muted:#6b5d4c; --line:#e7dcc6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--cream);color:var(--ink);line-height:1.65;font-size:17px}
+  header{background:linear-gradient(135deg,var(--red),var(--orange));color:#fff;padding:1.5rem 1.6rem}
+  header h1{margin:0;font-size:1.55rem}
+  header p{margin:.35rem 0 0;opacity:.93;font-size:1rem}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 1rem}
+  nav{position:sticky;top:0;background:var(--cream);border-bottom:2px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:.35rem;padding:.6rem 1rem;z-index:10}
+  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);
+    padding:.45rem .85rem;border-radius:999px;cursor:pointer;font-size:.9rem;transition:.15s}
+  nav button:hover{border-color:var(--orange)}
+  nav button.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600}
+  section{display:none;padding:1.5rem 0 3rem}
+  section.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2{color:var(--red);margin-top:0;font-size:1.5rem}
+  h3{color:var(--orange);margin-bottom:.2rem}
+  .lead{font-size:1.1rem}
+  .analogy{background:#fff7e6;border-left:6px solid var(--gold);border-radius:8px;padding:.9rem 1.1rem;margin:1rem 0}
+  .analogy b{color:var(--red)}
+  .tech{font-size:.85rem;color:var(--muted);background:#f3ead7;border-radius:6px;padding:.5rem .8rem;margin:.7rem 0}
+  .tech b{color:var(--ink)}
+  .crew{display:flex;flex-wrap:wrap;gap:.7rem;margin:1rem 0}
+  .member{flex:1 1 150px;min-width:140px;background:var(--card);border:1px solid var(--line);
+    border-radius:12px;padding:.8rem;text-align:center}
+  .member .face{font-size:1.8rem}
+  .member b{display:block;margin-top:.2rem;font-size:.95rem}
+  .member small{color:var(--muted);font-size:.8rem}
+  .line{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;margin:1.1rem 0;justify-content:center}
+  .step{background:#fff;border:2px solid var(--line);border-radius:12px;padding:.7rem .8rem;
+    text-align:center;min-width:120px;flex:0 1 auto}
+  .step .face{font-size:1.5rem}
+  .step b{display:block;font-size:.88rem}
+  .step small{color:var(--muted);font-size:.76rem}
+  .arrow{font-size:1.3rem;color:var(--orange)}
+  .b-gold{border-color:var(--gold)} .b-red{border-color:var(--red)}
+  .b-green{border-color:var(--green)} .b-orange{border-color:var(--orange)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:.9rem 0}
+  .eg{background:#eef6f1;border-left:5px solid var(--green);border-radius:8px;padding:.8rem 1rem;margin:.8rem 0}
+  .eg b{color:var(--green)}
+  ul{margin:.4rem 0 .6rem 1.1rem}
+  .badge{display:inline-block;font-size:.75rem;font-weight:700;padding:.15rem .55rem;border-radius:999px;color:#fff}
+  .yes{background:var(--green)} .soon{background:var(--orange)} .nope{background:var(--red)}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.92rem}
+  th,td{border:1px solid var(--line);padding:.5rem .65rem;text-align:left;vertical-align:top}
+  th{background:#f3ead7}
+  .who td:first-child{white-space:nowrap;font-weight:600}
+  .who td:nth-child(2){color:var(--muted);font-size:.88rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🐼 Meet Your AI Marketing Crew</h1>
+    <p>The whole system, explained like a small team you hired for the cafe.</p>
+  </div>
+</header>
+
+<nav class="wrap" id="tabs">
+  <button data-t="big" class="active">The Big Idea</button>
+  <button data-t="crew">Meet the Crew</button>
+  <button data-t="cheat">Cheat Sheet</button>
+  <button data-t="helpers">2 Hidden Helpers</button>
+  <button data-t="planner">🗓️ The Planner</button>
+  <button data-t="maker">🎨 The Maker</button>
+  <button data-t="checker">✅ The Checker</button>
+  <button data-t="boss">👍 Your Turn</button>
+  <button data-t="poster">📲 The Poster</button>
+  <button data-t="host">💬 The Host</button>
+  <button data-t="score">📊 The Scorekeeper</button>
+  <button data-t="ready">Is it ready?</button>
+</nav>
+
+<main class="wrap">
+
+<!-- BIG IDEA -->
+<section id="big" class="active">
+  <h2>The big idea, in one sentence</h2>
+  <p class="lead">You've hired a tiny marketing team for Voodoo Momo — and every member is an AI. Each one has exactly <b>one job</b>, and they hand the work down the line, like a kitchen pass.</p>
+
+  <div class="analogy">
+    <b>Picture your momo kitchen.</b> One person preps the filling, the next folds, another steams, another plates — and then <b>you</b> taste it before it reaches the customer. No single person does everything. The AI crew works the same way: a line of specialists, with you as the final taste-test.
+  </div>
+
+  <h3>The assembly line, start to finish</h3>
+  <div class="line">
+    <div class="step b-red"><span class="face">⏰</span><b>Bell rings</b><small>"time to post"</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🗓️</span><b>Planner</b><small>picks the idea</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🎨</span><b>Maker</b><small>writes + draws it</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">✅</span><b>Checker</b><small>on-brand?</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-orange"><span class="face">👍</span><b>You</b><small>yes / no</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">📲</span><b>Poster</b><small>puts it live</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">💬</span><b>Host</b><small>replies to fans</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">📊</span><b>Scorekeeper</b><small>did it work?</small></div>
+  </div>
+  <p>The best part: <b>nothing reaches Instagram without your "yes"</b> at the 👍 step. That door stays locked until you approve.</p>
+</section>
+
+<!-- CREW -->
+<section id="crew">
+  <h2>Meet the crew</h2>
+  <p>Each "staff member" is one AI specialist. Here's the whole team at a glance:</p>
+  <div class="crew">
+    <div class="member"><span class="face">📋</span><b>Manager</b><small>takes your request, briefs the team</small></div>
+    <div class="member"><span class="face">🗓️</span><b>Planner</b><small>decides what to post this week</small></div>
+    <div class="member"><span class="face">🎨</span><b>Maker</b><small>writes the caption, makes the picture</small></div>
+    <div class="member"><span class="face">✅</span><b>Checker</b><small>makes sure it sounds like you</small></div>
+    <div class="member"><span class="face">📲</span><b>Poster</b><small>publishes to Instagram</small></div>
+    <div class="member"><span class="face">💬</span><b>Host</b><small>chats with people in comments and DMs</small></div>
+    <div class="member"><span class="face">📊</span><b>Scorekeeper</b><small>checks likes, reach, saves</small></div>
+    <div class="member"><span class="face">🗄️</span><b>Notebook</b><small>remembers your brand and past posts</small></div>
+  </div>
+  <div class="analogy">
+    <b>Why a team of specialists instead of one do-everything AI?</b><br>
+    The same reason a kitchen has both a prep cook and a head chef: a specialist with one clear job is <b>cheaper, more reliable, and safer</b>. For example, only the <b>Poster</b> can touch the "publish" button — so nothing can ever go out by accident.
+  </div>
+  <div class="tech"><b>In tech terms:</b> each staff member is a LangGraph node. The "only the Poster can publish" rule is called <b>least-privilege tools</b>.</div>
+</section>
+
+<!-- CHEAT SHEET -->
+<section id="cheat">
+  <h2>Cheat sheet — who's who</h2>
+  <p class="lead">Every friendly nickname maps to a real part of the system. Keep this as your decoder ring.</p>
+  <table class="who">
+    <tr><th>Staffer</th><th>Real name</th><th>Job in plain words</th></tr>
+    <tr><td>📋 Manager</td><td>Coordinator</td><td>Takes your request, sets it up, and briefs the team</td></tr>
+    <tr><td>🗓️ Planner</td><td>Strategy agent</td><td>Decides what to post this week — the ideas</td></tr>
+    <tr><td>🎨 Maker</td><td>Creative agent</td><td>Writes the caption and makes the picture</td></tr>
+    <tr><td>✅ Checker</td><td>Validator</td><td>Makes sure it sounds like you and breaks no rules</td></tr>
+    <tr><td>👍 You</td><td>Human approval gate</td><td>The final yes or no — nothing posts without it</td></tr>
+    <tr><td>📲 Poster</td><td>Publishing agent</td><td>The only one allowed to post to Instagram</td></tr>
+    <tr><td>💬 Host</td><td>Engagement agent</td><td>Chats with customers, and calls you in for tricky ones</td></tr>
+    <tr><td>📊 Scorekeeper</td><td>Analytics agent</td><td>Checks how each post did: likes, reach, saves</td></tr>
+    <tr><td>🗄️ Notebook</td><td>Supabase (memory)</td><td>Remembers your brand voice and past posts</td></tr>
+    <tr><td>🧠 The brain</td><td>LangGraph + Claude</td><td>The thinking skill inside every staffer</td></tr>
+    <tr><td>🛎️ Office assistant</td><td>n8n</td><td>Watches the clock, hears the doorbell, texts your phone</td></tr>
+  </table>
+  <div class="tech">The last two aren't "staff" — they're the invisible help that lets the crew think (🧠) and run on time (🛎️). The next tab explains them.</div>
+</section>
+
+<!-- HELPERS -->
+<section id="helpers">
+  <h2>Two hidden helpers behind the crew</h2>
+  <p>Two things make the crew actually work day to day. They're easy to confuse, so here's each in one line:</p>
+
+  <div class="card">
+    <h3>🧠 The "brain" inside each staffer — <b>LangGraph + Claude</b></h3>
+    <p>This is the real <b>thinking</b>: writing a caption, judging whether a DM is risky, retrying when something comes out wrong. It's the skill each team member has.</p>
+  </div>
+  <div class="card">
+    <h3>🛎️ The "office assistant" — <b>n8n</b></h3>
+    <p>This one doesn't think. It <b>watches the clock</b> ("6pm — time to post"), <b>answers the doorbell</b> ("a new comment just arrived"), and <b>taps you on the shoulder</b> ("approve this one?"). It runs errands and carries messages.</p>
+  </div>
+
+  <div class="analogy">
+    <b>"If we have the assistant, do we still need the brain?"</b><br>
+    Yes. The assistant can ring a bell and fetch you, but it can't write a caption or read the mood of an angry DM. The brain is brilliant at the craft, but it can't watch a clock or text your phone. You need <b>both</b>: the assistant handles <i>timing and messages</i>; the brain handles <i>thinking</i>.
+  </div>
+  <table>
+    <tr><th></th><th>🛎️ n8n (assistant)</th><th>🧠 LangGraph + Claude (brain)</th></tr>
+    <tr><td>Great at</td><td>the clock, the doorbell, texting you, moving info between apps</td><td>writing, judging, deciding, double-checking</td></tr>
+    <tr><td>Can't do</td><td>think or write</td><td>watch a clock or text your phone</td></tr>
+  </table>
+</section>
+
+<!-- PLANNER -->
+<section id="planner">
+  <h2>🗓️ The Planner — where ideas come from</h2>
+  <p class="lead">When you ask "what should we post this week?", the <b>Planner</b> is the one who answers.</p>
+  <div class="analogy">
+    Picture a <b>head waiter planning the week's specials</b>. They know your menu, your style, and what sells — so they sketch out the week: "Monday, a spicy Achari close-up; Wednesday, a behind-the-scenes steamer shot; Friday, a weekend offer."
+  </div>
+  <div class="line">
+    <div class="step b-green"><span class="face">🗄️</span><b>Your brand + menu</b><small>what you're about</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🗓️</span><b>Planner thinks</b><small>(deeper AI: Claude Sonnet)</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">📃</span><b>A week of ideas</b><small>7 post plans</small></div>
+  </div>
+  <div class="eg">
+    <b>One idea it produces:</b> "Day 1 — product spotlight, a feed photo of <b>Achari Momo</b>, aimed at the evening college crowd."<br>
+    That single line is <b>one idea</b>. The Maker turns it into the actual post next.
+  </div>
+  <div class="card">
+    <p><span class="badge soon">basic for now</span> The Planner makes a sensible weekly plan, but it doesn't yet learn from what did well last month. That "gets smarter over time" part is still to come — see the Scorekeeper.</p>
+  </div>
+</section>
+
+<!-- MAKER -->
+<section id="maker">
+  <h2>🎨 The Maker — writes it and draws it</h2>
+  <p class="lead">The Maker takes <b>one idea</b> from the Planner and turns it into a finished post — the words <b>and</b> the picture.</p>
+  <div class="analogy">
+    Think of a <b>copywriter and a photographer in one person</b>. They write the caption in your voice, choose the hashtags, and create an image with your panda mascot in it.
+  </div>
+  <div class="line">
+    <div class="step b-gold"><span class="face">💬</span><b>Caption</b><small>(fast AI: Claude Haiku)</small></div>
+    <span class="arrow">+</span>
+    <div class="step b-gold"><span class="face">🖼️</span><b>Picture</b><small>(image AI: Gemini)</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-green"><span class="face">🗄️</span><b>Saved online</b><small>so Instagram can fetch it</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">📦</span><b>Finished post</b></div>
+  </div>
+  <div class="eg">
+    <b>What it produces:</b> "Steaming hot. Made fresh. Achari or Choila — you pick. 🥟 Come find us in Wagholi this evening." + 8 hashtags + a picture of the panda with a bowl of momos.
+  </div>
+  <div class="tech"><b>Why save the picture online first?</b> Instagram won't accept an image file directly — it insists on fetching a web link. So every image is saved online, and we hand Instagram that link.</div>
+  <div class="card"><p><span class="badge soon">needs a paid switch</span> The image-AI (Gemini) needs billing turned on before it can draw. Until then, we use your existing real photos.</p></div>
+</section>
+
+<!-- CHECKER -->
+<section id="checker">
+  <h2>✅ The Checker — the brand guardian</h2>
+  <p class="lead">Before anything reaches you, the <b>Checker</b> confirms it truly sounds like Voodoo Momo and breaks none of your rules.</p>
+  <div class="analogy">
+    Think of a <b>strict proofreader who knows your brand book by heart</b>. If the Maker gets carried away and writes "BEST MOMOS IN PUNE!!! 🔥🔥", the Checker stops it at the door.
+  </div>
+  <h3>What it checks, every single time</h3>
+  <ul>
+    <li>Between 8 and 12 hashtags — and your 3 must-have ones are present</li>
+    <li>No banned words ("best momos", "you deserve", over-the-top hype)</li>
+    <li>Caption not too long, and only your approved emojis</li>
+  </ul>
+  <div class="line">
+    <div class="step b-gold"><span class="face">📝</span><b>Draft</b></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">✅</span><b>Checker</b></div>
+    <span class="arrow">→</span>
+    <div class="step b-green"><span class="face">👍</span><b>Passes</b><small>moves on</small></div>
+    <span class="arrow">or</span>
+    <div class="step b-red"><span class="face">🔁</span><b>Fails</b><small>sends it back to fix &amp; retry</small></div>
+  </div>
+  <div class="analogy">
+    <b>The "how sure are you?" score.</b> Every staffer also rates its own confidence, from 0 to 100%. If the Maker is only, say, 50% sure, the post is automatically held back for <b>you</b> — it can't slip through. It's like a junior cook saying, "Chef, can you taste this? I'm not certain."
+  </div>
+  <div class="card"><p><b>Why bother?</b> AI sometimes drifts off-brand. The Checker is the safety net that guarantees whatever the AI writes is either on-brand — or flagged for you. <span class="badge yes">working now</span></p></div>
+</section>
+
+<!-- BOSS -->
+<section id="boss">
+  <h2>👍 Your turn — the approval</h2>
+  <p class="lead">This is the most important step of all: <b>nothing goes live until you say yes.</b></p>
+  <div class="analogy">
+    Picture a <b>locked door in front of the "Publish" button</b>. The only key is your approval. The crew can prepare everything and walk right up to that door — but it cannot open without you.
+  </div>
+  <table>
+    <tr><th></th><th>How it works today</th><th>How it'll work soon</th></tr>
+    <tr><td>You see the post</td><td>It appears in a developer window (caption + image)</td><td>It pings your <b>phone</b> (WhatsApp / Telegram) with the image and caption</td></tr>
+    <tr><td>You approve</td><td>You type "approve"</td><td>You tap an <b>✅ Approve</b> button</td></tr>
+  </table>
+  <div class="tech"><b>In tech terms:</b> the workflow "pauses" at this gate (<code>interrupt_before</code>) and only continues once an <code>approved = yes</code> flag is set. Delivering that approval to your phone is the office-assistant's (n8n) most useful future job.</div>
+  <div class="card"><p><span class="badge soon">phone approval not built yet</span> Today you approve in a developer window; the tap-on-your-phone version is the next thing worth building.</p></div>
+</section>
+
+<!-- POSTER -->
+<section id="poster">
+  <h2>📲 The Poster — puts it live</h2>
+  <p class="lead">Once you approve, the Poster publishes to Instagram — and it's the only one allowed to.</p>
+  <div class="analogy">
+    Think of the <b>one staffer who holds the keys to the Instagram account</b>. Everyone else can prepare posts; only this person can actually hit "share".
+  </div>
+  <div class="line">
+    <div class="step b-gold"><span class="face">📦</span><b>Approved post</b></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🪄</span><b>Gets it ready</b><small>stages it on Instagram</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-green"><span class="face">🎉</span><b>Live!</b><small>+ a link to the post</small></div>
+  </div>
+  <div class="card">
+    <ul>
+      <li><span class="badge yes">proven</span> Your first real post went live through exactly this step.</li>
+      <li><b>Special case:</b> Reels with trending music can't be auto-posted (Instagram's rule), so those are set aside for you to post by hand.</li>
+      <li><span class="badge soon">missing</span> It posts immediately on approval — it can't yet "hold until 6pm Friday."</li>
+    </ul>
+  </div>
+</section>
+
+<!-- HOST -->
+<section id="host">
+  <h2>💬 The Host — talks to your customers</h2>
+  <p class="lead">Once a post is live, people comment and send DMs. The <b>Host</b> handles them — and knows exactly when to call you in.</p>
+  <div class="analogy">
+    Think of a <b>warm, friendly person at the counter</b>. They happily answer "what time do you close?" on their own — but if a customer is upset, asks about catering for 40, or mentions a refund, they instantly say, "Let me get the manager."
+  </div>
+  <h3>How it decides, message by message</h3>
+  <div class="line">
+    <div class="step b-red"><span class="face">📨</span><b>New comment / DM</b></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🤔</span><b>Host reads it</b><small>friendly? risky?</small></div>
+  </div>
+  <div class="line">
+    <div class="step b-green"><span class="face">😊</span><b>Simple &amp; safe</b><small>→ replies itself</small></div>
+    <div class="step b-orange"><span class="face">🙋</span><b>Risky or unsure</b><small>→ calls you in</small></div>
+    <div class="step b-red"><span class="face">⏳</span><b>DM over 24h old</b><small>→ stays quiet (Instagram's rule)</small></div>
+  </div>
+  <div class="analogy">
+    <b>Why is this one called "the real agent"?</b> Because it doesn't follow a fixed script — it reads each message and <b>decides</b> what to do, using judgement like a real employee. The others mostly follow steps; the Host actually chooses.
+  </div>
+  <div class="card"><p><span class="badge yes">the deciding part works</span> &nbsp; <span class="badge soon">but</span> it can't yet hear new comments the moment they arrive — that "doorbell" (the office-assistant's job) still needs wiring.</p></div>
+</section>
+
+<!-- SCORE -->
+<section id="score">
+  <h2>📊 The Scorekeeper — and getting smarter</h2>
+  <p class="lead">After posts go out, the Scorekeeper checks how they did — and, in time, helps the Planner come up with better ideas.</p>
+  <div class="analogy">
+    Think of someone <b>jotting results in a notebook</b>: "the Achari close-up got 300 likes and 40 saves — people love spicy." Over time, the Planner reads that notebook and leans into what works.
+  </div>
+  <div class="line">
+    <div class="step b-gold"><span class="face">📊</span><b>Check results</b><small>likes, reach, saves</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-green"><span class="face">🗄️</span><b>Write it down</b><small>in the Notebook</small></div>
+    <span class="arrow">→</span>
+    <div class="step b-gold"><span class="face">🗓️</span><b>Planner learns</b><small>do more of what worked</small></div>
+  </div>
+  <div class="card"><p><span class="badge nope">not working yet</span> This "learning" loop is the biggest unfinished piece — the notebook isn't being written to yet, so the crew doesn't improve from results so far.</p></div>
+</section>
+
+<!-- READY -->
+<section id="ready">
+  <h2>Is it ready for real, everyday use?</h2>
+  <p class="lead"><b>Not yet — but it works.</b> Think of it as a <b>kitchen that can cook one dish beautifully, but isn't a fully running restaurant yet.</b> You can create and publish a great post today; it just needs more before it can run on its own, every day.</p>
+
+  <h3>✅ What already works</h3>
+  <ul>
+    <li>Make a post → check it's on-brand → you approve → it goes live. <span class="badge yes">done, proven</span></li>
+    <li>It remembers your brand voice and rules.</li>
+  </ul>
+
+  <h3>🛠️ What's still missing for "set and forget"</h3>
+  <table>
+    <tr><th>Missing piece</th><th>In plain words</th></tr>
+    <tr><td>Runs on a schedule</td><td>It can't yet wake itself up and post on Fridays — you start it each time</td></tr>
+    <tr><td>Approve from your phone</td><td>Today you approve in a developer window, not by tapping your phone</td></tr>
+    <tr><td>Hears comments live</td><td>The Host can't yet notice new comments and DMs the moment they arrive</td></tr>
+    <tr><td>Learns from results</td><td>It doesn't yet remember which posts did well, so it can't improve next time</td></tr>
+    <tr><td>Draws its own images</td><td>The image-AI needs billing switched on</td></tr>
+    <tr><td>Safety nets</td><td><b>Now guards against posting the same thing twice.</b> Still to do: activity logging, and moving passwords out of a plain file</td></tr>
+  </table>
+
+  <div class="analogy">
+    <b>The shortlist to make it a real, hands-off cafe assistant:</b>
+    <ol>
+      <li>Add the office assistant (n8n) so it <b>posts on schedule</b>, <b>asks you on your phone</b>, and <b>hears comments live</b>.</li>
+      <li>Turn on the <b>learning notebook</b> so it gets smarter over time.</li>
+      <li>Switch on image generation, and add the basic safety nets.</li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<script>
+  const tabs = document.getElementById('tabs');
+  tabs.addEventListener('click', e => {
+    if(e.target.tagName !== 'BUTTON') return;
+    const id = e.target.dataset.t;
+    document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===e.target));
+    document.querySelectorAll('section').forEach(s=>s.classList.toggle('active', s.id===id));
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+</script>
+</body>
+</html>

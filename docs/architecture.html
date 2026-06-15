@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voodoo Momo — Agent Architecture</title>
+<style>
+  :root{
+    --gold:#E8A317; --red:#B22222; --orange:#E07B39; --green:#3E7C57;
+    --ink:#2b2118; --cream:#fbf6ec; --card:#fffdf8; --muted:#6b5d4c; --line:#e7dcc6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--cream);color:var(--ink);line-height:1.55}
+  header{background:linear-gradient(135deg,var(--red),var(--orange));color:#fff;padding:1.4rem 1.6rem}
+  header h1{margin:0;font-size:1.5rem}
+  header p{margin:.3rem 0 0;opacity:.92;font-size:.95rem}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 1rem}
+  nav{position:sticky;top:0;background:var(--cream);border-bottom:2px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:.3rem;padding:.6rem 1rem;z-index:10}
+  nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);
+    padding:.45rem .8rem;border-radius:999px;cursor:pointer;font-size:.85rem;transition:.15s}
+  nav button:hover{border-color:var(--orange)}
+  nav button.active{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:600}
+  section{display:none;padding:1.4rem 0 3rem}
+  section.active{display:block;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2{color:var(--red);border-bottom:2px solid var(--gold);padding-bottom:.3rem;margin-top:0}
+  h3{color:var(--orange);margin-bottom:.3rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:.8rem 0}
+  .pipeline{display:flex;flex-wrap:wrap;gap:.4rem;align-items:stretch;margin:1rem 0}
+  .node{flex:1 1 130px;min-width:120px;border-radius:8px;padding:.55rem .6rem;font-size:.82rem;
+    border-left:5px solid var(--muted);background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .node b{display:block;font-size:.86rem}
+  .node small{color:var(--muted)}
+  .brain{border-left-color:var(--gold);background:#fffaf0}
+  .nerve{border-left-color:var(--red);background:#fdf0f0}
+  .store{border-left-color:var(--green);background:#eef6f1}
+  .human{border-left-color:var(--orange);background:#fdf2ea}
+  .legend{display:flex;flex-wrap:wrap;gap:1rem;font-size:.8rem;margin:.6rem 0}
+  .legend span{display:flex;align-items:center;gap:.35rem}
+  .dot{width:12px;height:12px;border-radius:3px;display:inline-block}
+  table{border-collapse:collapse;width:100%;margin:.6rem 0;font-size:.86rem}
+  th,td{border:1px solid var(--line);padding:.5rem .6rem;text-align:left;vertical-align:top}
+  th{background:#f3ead7}
+  code{background:#f3ead7;padding:.1rem .35rem;border-radius:4px;font-size:.85em}
+  .pill{display:inline-block;font-size:.72rem;font-weight:600;padding:.12rem .5rem;border-radius:999px;color:#fff}
+  .ok{background:var(--green)} .warn{background:var(--orange)} .no{background:var(--red)}
+  .flow{font-family:ui-monospace,Menlo,monospace;font-size:.82rem;background:#2b2118;color:#f3ead7;
+    padding:.9rem 1rem;border-radius:8px;overflow-x:auto;white-space:pre}
+  ul{margin:.4rem 0 .4rem 1.1rem}
+  .q{font-style:italic;color:var(--muted);margin:.2rem 0 .6rem}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>🐼 Voodoo Momo — Agent Architecture</h1>
+    <p>How the marketing agent thinks, decides, and publishes — workflow by workflow.</p>
+  </div>
+</header>
+
+<nav class="wrap" id="tabs">
+  <button data-t="overview" class="active">Overview</button>
+  <button data-t="layers">Brain vs n8n</button>
+  <button data-t="strategy">Ideas (Strategy)</button>
+  <button data-t="creative">Creative + Images</button>
+  <button data-t="validator">Validator</button>
+  <button data-t="approval">Approval &amp; Review</button>
+  <button data-t="publishing">Publishing</button>
+  <button data-t="engagement">Engagement</button>
+  <button data-t="analytics">Analytics &amp; Learning</button>
+  <button data-t="storage">Where Data Lives</button>
+  <button data-t="prod">Production-Ready?</button>
+</nav>
+
+<main class="wrap">
+
+<!-- OVERVIEW -->
+<section id="overview" class="active">
+  <h2>End-to-end workflow</h2>
+  <p>Two layers cooperate. <b>n8n</b> handles events &amp; humans (the nervous system); <b>LangGraph + Claude</b> do the reasoning (the brain); <b>Supabase</b> remembers everything.</p>
+  <div class="legend">
+    <span><i class="dot" style="background:var(--gold)"></i> LangGraph / Claude (brain)</span>
+    <span><i class="dot" style="background:var(--red)"></i> n8n (events, schedule, notify)</span>
+    <span><i class="dot" style="background:var(--green)"></i> Supabase (memory + storage)</span>
+    <span><i class="dot" style="background:var(--orange)"></i> Human in the loop</span>
+  </div>
+  <div class="pipeline">
+    <div class="node nerve"><b>1. Trigger</b><small>schedule / manual</small></div>
+    <div class="node brain"><b>2. Coordinator</b><small>validate brief, load brand</small></div>
+    <div class="node brain"><b>3. Strategy</b><small>7-day calendar = the ideas</small></div>
+    <div class="node brain"><b>4. Creative</b><small>caption + image</small></div>
+    <div class="node brain"><b>5. Validator</b><small>brand rules + confidence</small></div>
+    <div class="node human"><b>6. Approval</b><small>you say yes (via n8n)</small></div>
+    <div class="node brain"><b>7. Publish</b><small>Instagram</small></div>
+    <div class="node brain"><b>8. Engagement</b><small>comments + DMs</small></div>
+    <div class="node brain"><b>9. Analytics</b><small>insights</small></div>
+    <div class="node store"><b>10. Learning</b><small>store + improve</small></div>
+  </div>
+  <div class="card">
+    <h3>The one rule that prevents chaos</h3>
+    <p>n8n only touches <b>events, scheduling, notifications, and human approval delivery</b>. It <b>never</b> makes a content or brand decision — that always stays in the LangGraph brain. Break this rule and the system becomes untestable.</p>
+  </div>
+</section>
+
+<!-- LAYERS -->
+<section id="layers">
+  <h2>Do we need LangGraph if we have n8n?</h2>
+  <p class="q">Short answer: yes. They solve different problems.</p>
+  <table>
+    <tr><th></th><th>n8n (nervous system)</th><th>LangGraph + Claude (brain)</th></tr>
+    <tr><td>Good at</td><td>Triggers, schedules, webhooks, app connectors, sending an approval to your phone, retries on HTTP calls, visual monitoring</td><td>Multi-step LLM reasoning, typed shared state, validation + repair loops, confidence routing, the agentic engagement loop, human-interrupt gates</td></tr>
+    <tr><td>Cannot do</td><td>Reason, validate brand rules, hold agent state, loop while the model picks the next tool</td><td>Listen for a webhook, schedule itself, message a human on WhatsApp</td></tr>
+    <tr><td>Analogy</td><td>The conveyor belt, the buttons, the bell that calls the human</td><td>The skilled worker doing the craft at each station</td></tr>
+  </table>
+  <h3>Why separate sub-agents instead of n8n alone?</h3>
+  <ul>
+    <li><b>Different model per job</b> — cheap Claude Haiku for caption drafts, reasoning Claude Sonnet for strategy. One mega-prompt would be unreliable and expensive.</li>
+    <li><b>Least-privilege tools</b> — only the Publishing node can publish; only Engagement can reply to DMs. A single agent holding every capability is a security risk.</li>
+    <li><b>Focused + testable</b> — each agent has a narrow contract you can unit-test. n8n chaining LLM nodes gives you none of these guarantees.</li>
+  </ul>
+  <p>You could drop LangGraph only if the agent were a single dumb "write a caption" call. This one has validation loops, confidence gating, an agentic classifier, and human interrupts — that's LangGraph's job.</p>
+</section>
+
+<!-- STRATEGY -->
+<section id="strategy">
+  <h2>Who comes up with the idea?</h2>
+  <p class="q">The <b>Strategy</b> agent invents the plan; the <b>Creative</b> agent executes a single item from it.</p>
+  <div class="flow">brand profile + campaign brief + (future) past performance
+        │
+        ▼
+  Claude Sonnet  ──►  structured 7-day calendar
+        │
+        ▼
+  [ {day:0, pillar:"product spotlight", format:"feed_post",
+      topic:"Achari Momo close-up", variety:"Achari"},
+    {day:1, pillar:"community", ...}, ... ]   ← each entry = one "idea"</div>
+  <h3>How it generates ideas</h3>
+  <ul>
+    <li>It is <b>bounded</b> by the brand's content pillars (product spotlight 3×/wk, behind-the-scenes 1×, community 1×, offer as needed) and the 31-variety menu.</li>
+    <li>Claude Sonnet returns a typed <code>ContentCalendar</code> (list of <code>ScheduledPost</code>), so the output is structured, not free text.</li>
+    <li>Each calendar entry becomes a <code>PostBrief</code> handed to Creative.</li>
+  </ul>
+  <div class="card">
+    <h3>Honest limitation (today)</h3>
+    <p>Idea generation is currently fairly mechanical — a calendar derived from the brief. A richer "idea engine" (seasonal monsoon framing, local Wagholi events, performance-weighted past winners) is the <b>learning-loop</b> upgrade and isn't wired yet, because performance feedback (embeddings + <code>store_post</code>) is still a placeholder.</p>
+  </div>
+</section>
+
+<!-- CREATIVE -->
+<section id="creative">
+  <h2>Creative — captions &amp; images</h2>
+  <p>Takes one calendar entry (a <code>PostBrief</code>) and produces the concrete post.</p>
+  <div class="pipeline">
+    <div class="node brain"><b>Caption</b><small>Claude Haiku + few-shot → JSON (caption, hashtags, CTA, confidence)</small></div>
+    <div class="node brain"><b>Image prompt</b><small>built from the brief + mascot reference</small></div>
+    <div class="node brain"><b>Image</b><small>Gemini "Nano Banana" → JPEG</small></div>
+    <div class="node store"><b>Upload</b><small>Supabase Storage → public URL</small></div>
+  </div>
+  <h3>Why the image must be uploaded</h3>
+  <p>Instagram's API never takes raw image bytes — it <b>fetches a public URL</b> server-side. So every generated image is uploaded to a public Supabase Storage bucket first, and that URL is what Publishing sends.</p>
+  <div class="card">
+    <p><span class="pill warn">blocked</span> Image generation needs Gemini billing enabled — image models aren't on the free tier. Until then, real photos (you already have polished mascot art) are the image source.</p>
+  </div>
+</section>
+
+<!-- VALIDATOR -->
+<section id="validator">
+  <h2>What is the Validator, and why do we need it?</h2>
+  <p class="q">LLMs drift. The Validator is the deterministic guarantee that whatever the model writes either meets brand rules or gets flagged.</p>
+  <h3>How it works</h3>
+  <p>The caption JSON is parsed into a Pydantic <code>Caption</code> model whose validators hard-check:</p>
+  <ul>
+    <li>Hashtags: 8–12 total, all 3 core tags present, no banned tags</li>
+    <li>No banned phrases (<code>"best momos"</code>, <code>"you deserve"</code>, hyperbole…)</li>
+    <li>Caption length within range; confidence is a real 0–1 number</li>
+  </ul>
+  <div class="flow">Claude draft ──► Pydantic validate
+                     │
+         ┌───────────┴───────────┐
+       PASS                     FAIL
+         │                        │
+         ▼                        ▼
+   keep caption        inject error into prompt,
+                       retry (repair loop, ≤2×)
+                            │ still failing?
+                            ▼
+                  confidence = 0 → human review</div>
+  <h3>Confidence router</h3>
+  <p>Every output carries a <code>confidence_score</code>. Below <b>0.7</b> sets <code>human_review_required</code> — the post can't auto-proceed. This (plus the eval harness in CI) turns probabilistic LLM output into a reliable, brand-safe contract.</p>
+  <p><b>Why needed:</b> without it you'd eventually publish "BEST MOMOS IN PUNE!!! 🔥🔥" with 20 banned hashtags. The validator makes that structurally impossible.</p>
+</section>
+
+<!-- APPROVAL -->
+<section id="approval">
+  <h2>Where do I see &amp; validate the idea?</h2>
+  <p class="q">This is the human-in-the-loop gate — and the part most worth improving.</p>
+  <table>
+    <tr><th></th><th>Today (prototype)</th><th>Production (with n8n)</th></tr>
+    <tr><td>How you see it</td><td>A script prints the caption + image + staged container in the terminal</td><td>n8n sends the staged post — <b>image preview + caption + hashtags</b> — to WhatsApp / Telegram / Slack, or an operator dashboard</td></tr>
+    <tr><td>How you approve</td><td>You type "approve" in the CLI/chat</td><td>You tap <b>Approve / Reject</b> on your phone</td></tr>
+    <tr><td>Enforcement</td><td colspan="2"><code>interrupt_before=["human_approval"]</code> — the graph physically cannot reach Publish unless <code>approved == True</code></td></tr>
+  </table>
+  <div class="card">
+    <h3>This is where n8n earns its place</h3>
+    <p>The graph pauses at the gate and emits a webhook → n8n delivers a rich approval card to your phone → your tap calls back the resume endpoint → the graph continues to Publish. <span class="pill no">not built yet</span> — currently approval is manual in the CLI.</p>
+  </div>
+</section>
+
+<!-- PUBLISHING -->
+<section id="publishing">
+  <h2>Publishing</h2>
+  <p>Runs only after <code>approved == True</code>. Uses the Instagram-Login API (<code>graph.instagram.com</code>).</p>
+  <div class="flow">create_media_container(image_url, caption)   ← stages, not live
+        │
+        ▼
+  wait_for_container  ──►  status FINISHED
+        │
+        ▼
+  publish_media(container_id)  ──►  live post + permalink</div>
+  <ul>
+    <li><b>Manual queue:</b> Reels with trending audio, or risky media, are routed to a manual-publish queue instead of auto-posting (Meta restriction).</li>
+    <li><b>Scoped tools:</b> only the Publishing node holds publish tools.</li>
+    <li><span class="pill ok">proven</span> First live post to @voodoomomo went through this exact path.</li>
+    <li><span class="pill warn">missing</span> No scheduler yet — it publishes immediately on approval rather than holding until a target time.</li>
+  </ul>
+</section>
+
+<!-- ENGAGEMENT -->
+<section id="engagement">
+  <h2>How the Engagement agent works</h2>
+  <p class="q">The one true <b>agentic loop</b> — it decides per message what to do, rather than following a fixed transform.</p>
+  <div class="flow">new comment / DM (via webhook)
+        │
+        ▼
+  classify with Claude Haiku
+   → intent (question / compliment / complaint / booking / spam)
+   → suggested reply
+   → confidence
+   → escalate?  (keywords: refund, catering, legal, food poisoning…)
+        │
+   ┌────┴───────────────┬────────────────────┐
+   ▼                    ▼                     ▼
+ safe + confident   escalate OR conf<0.7   DM window expired
+   │                    │                     │
+   ▼                    ▼                     ▼
+ auto-reply        send to human         discard, never retry</div>
+  <h3>Compliance baked in</h3>
+  <ul>
+    <li>Reply to DMs <b>only within the 24-hour</b> user-initiated window; <b>never initiate</b> a DM.</li>
+    <li>On <code>DM_WINDOW_EXPIRED</code> → discard the reply (never retry/queue).</li>
+    <li>Comment-reply and DM-reply tools are scoped to this node only.</li>
+  </ul>
+  <p><span class="pill ok">built</span> the classifier + escalation logic. <span class="pill warn">missing</span> live webhook ingestion (n8n) — today it processes a queue passed in state, not a live comment feed.</p>
+</section>
+
+<!-- ANALYTICS -->
+<section id="analytics">
+  <h2>Analytics &amp; the Learning Loop</h2>
+  <div class="pipeline">
+    <div class="node brain"><b>Analytics</b><small>get_media_insights → reach, impressions, likes, comments, saves, shares</small></div>
+    <div class="node store"><b>Store</b><small>post + performance → Supabase</small></div>
+    <div class="node brain"><b>Improve</b><small>retrieve past winners into next Strategy run</small></div>
+  </div>
+  <h3>The intended virtuous cycle</h3>
+  <p>Published post + its performance is stored with an embedding; next week's Strategy run retrieves the best-performing similar posts and weights ideas toward what worked.</p>
+  <div class="card">
+    <p><span class="pill no">hollow today</span> <code>_embed()</code> returns a zero vector and <code>store_post()</code> isn't called after publish — so the loop doesn't actually learn yet. Wiring a real embedding model + the post-publish write closes it.</p>
+  </div>
+</section>
+
+<!-- STORAGE -->
+<section id="storage">
+  <h2>Where everything lives</h2>
+  <table>
+    <tr><th>Data</th><th>Stored in</th><th>Status</th></tr>
+    <tr><td>Brand voice, hashtags, banned phrases</td><td>Supabase <code>brand_profile</code></td><td><span class="pill ok">live</span></td></tr>
+    <tr><td>Published posts + performance + embeddings</td><td>Supabase <code>brand_posts</code> (pgvector)</td><td><span class="pill warn">table live, not yet written to</span></td></tr>
+    <tr><td>Post images</td><td>Supabase Storage (public bucket)</td><td><span class="pill ok">live</span></td></tr>
+    <tr><td>Campaign / calendar / approval state</td><td>LangGraph checkpointer (Supabase Postgres)</td><td><span class="pill ok">live</span></td></tr>
+    <tr><td>Prompts, traces, eval pass-rates</td><td>Langfuse</td><td><span class="pill no">no-op shim</span></td></tr>
+    <tr><td>Secrets / tokens</td><td><code>.env</code> (gitignored) / GitHub Secrets</td><td><span class="pill warn">no secret manager</span></td></tr>
+  </table>
+  <p>To <b>see</b> data visually today: Supabase Studio (raw tables) and the public Storage URLs. A real operator dashboard (calendar, pending approvals, queue, analytics) is not built.</p>
+</section>
+
+<!-- PRODUCTION -->
+<section id="prod">
+  <h2>Is this production-ready?</h2>
+  <p class="q">No — it's a working prototype. The happy path (draft → approve → publish) is proven end-to-end, but production hardening is roughly 50–60% done for a single cafe, and further for multi-tenant.</p>
+  <table>
+    <tr><th>Area</th><th>State</th><th>Gap to production</th></tr>
+    <tr><td>Draft → approve → publish</td><td><span class="pill ok">works</span></td><td>—</td></tr>
+    <tr><td>Live event ingestion (comments/DMs, scheduling)</td><td><span class="pill no">missing</span></td><td>n8n webhooks + scheduler; nothing is event-driven yet</td></tr>
+    <tr><td>Visual approval / operator dashboard</td><td><span class="pill no">missing</span></td><td>n8n mobile approval or a dashboard; today it's CLI-only</td></tr>
+    <tr><td>Learning loop</td><td><span class="pill no">hollow</span></td><td>real embeddings + <code>store_post()</code></td></tr>
+    <tr><td>Image generation</td><td><span class="pill warn">blocked</span></td><td>enable Gemini billing</td></tr>
+    <tr><td>Observability</td><td><span class="pill warn">shim</span></td><td>configure Langfuse; alerting</td></tr>
+    <tr><td>Idempotency / dedup</td><td><span class="pill ok">built</span></td><td>stable <code>post_id</code> + per-attempt id; Publishing skips already-published posts (state + DB), unique index backstop</td></tr>
+    <tr><td>Unified <code>PostAsset</code> schema</td><td><span class="pill ok">built</span></td><td>threads campaign → post → media → metrics (<code>src/schemas.py</code>)</td></tr>
+    <tr><td>Engagement pre-tool policy gate</td><td><span class="pill ok">built</span></td><td>deterministic re-check before any reply tool fires</td></tr>
+    <tr><td>Rate-limit / retry policy</td><td><span class="pill warn">partial</span></td><td>error types exist; backoff/dead-letter policy doesn't</td></tr>
+    <tr><td>Audit trail (who approved what)</td><td><span class="pill no">missing</span></td><td>compliance log</td></tr>
+    <tr><td>Token refresh automation</td><td><span class="pill warn">script only</span></td><td>cron it before the 60-day expiry</td></tr>
+    <tr><td>Secrets management</td><td><span class="pill warn">.env</span></td><td>secret manager + rotation</td></tr>
+    <tr><td>Multi-cafe isolation</td><td><span class="pill no">single-tenant</span></td><td>per-account state + creds</td></tr>
+    <tr><td>CI eval gating</td><td><span class="pill warn">continue-on-error</span></td><td>enforce eval pass-rate once stable</td></tr>
+  </table>
+  <h3>Smallest set to call it a production single-cafe MVP</h3>
+  <ol>
+    <li>n8n: scheduled posting + <b>mobile approval</b> + comment/DM webhooks</li>
+    <li>Close the learning loop (embeddings + <code>store_post</code>)</li>
+    <li>Enable Gemini billing (or commit to real photos)</li>
+    <li>Idempotency guard + automated token refresh + Langfuse on</li>
+  </ol>
+</section>
+
+</main>
+
+<script>
+  const tabs = document.getElementById('tabs');
+  tabs.addEventListener('click', e => {
+    if(e.target.tagName !== 'BUTTON') return;
+    const id = e.target.dataset.t;
+    document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b===e.target));
+    document.querySelectorAll('section').forEach(s=>s.classList.toggle('active', s.id===id));
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+</script>
+</body>
+</html>

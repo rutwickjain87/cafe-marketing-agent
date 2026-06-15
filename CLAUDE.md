@@ -8,6 +8,8 @@
 - `publish` node is unreachable unless `state["approved"] == True` — this is a hard invariant
 - Every agent output includes `confidence_score: float`; below 0.7 → set `human_review_required = True`
 - Tool distribution follows least-privilege: publishing tools → Publishing node only; comment/DM tools → Engagement node only
+- One post = one `PostAsset` (`src/schemas.py`), threaded campaign → post → media → metrics. Publishing is **idempotent on `post_id`** (skips posts already published in state or DB) — never weaken this; it prevents double-posting
+- Engagement runs a **deterministic policy gate before any reply tool fires** — the LLM's `escalate` flag is never the only check
 
 ## Brand profile
 
@@ -32,4 +34,4 @@
 
 ## Current status
 
-Phases 0–6 implemented and wired; first live post published to @voodoomomo. Remaining hardening: real embeddings in `brand_memory._embed()` (zero-vector placeholder today), `store_post()` after publish, and driving publish through the compiled graph's `interrupt_before` gate end-to-end. The 60-day Instagram token refreshes via `scripts/refresh_ig_token.py`.
+Phases 0–6 implemented and wired; first live post published to @voodoomomo. Reliability backbone (PostAsset + idempotency + engagement policy gate) done. Production path tracked in `docs/production-mvp.md` (separate from the study `docs/build-schedule.md`). Remaining: the n8n operator layer (scheduling, phone approval, live webhooks), real embeddings in `brand_memory._embed()` (zero-vector placeholder today), and analytics writeback. The 60-day Instagram token refreshes via `scripts/refresh_ig_token.py`.
