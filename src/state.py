@@ -12,7 +12,7 @@ class AgentState(TypedDict, total=False):
 
     # Node outputs
     strategy: dict | None           # content calendar from strategy_node
-    creative_assets: list[dict]     # [{caption, hashtags, cta, confidence, media_id?, permalink?}]
+    creative_assets: list[dict]     # serialized PostAsset dicts (see src/schemas.py)
 
     # Approval gate — publishing_node checks this; the hard invariant is never bypassed
     approved: bool

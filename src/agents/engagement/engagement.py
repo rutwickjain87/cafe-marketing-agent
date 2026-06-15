@@ -30,6 +30,14 @@ ESCALATION_KEYWORDS = (
     "sick", "food poisoning", "rotten", "stale",
 )
 
+# Deterministic guardrails applied to the LLM's drafted reply *before* any tool
+# fires — the model's own judgement is never the last line of defence.
+_BANNED_REPLY_PHRASES = (
+    "best momos", "you deserve", "indulge yourself",
+    "game-changer", "life-changing", "mind-blowing",
+)
+_MAX_REPLY_LEN = 500  # Instagram comment/DM safety cap
+
 MessageType = Literal["comment", "dm"]
 
 
@@ -81,6 +89,26 @@ def _should_escalate(text: str) -> bool:
     return any(kw in lower for kw in ESCALATION_KEYWORDS)
 
 
+def _reply_passes_policy(message: IncomingMessage, reply: str) -> tuple[bool, str]:
+    """Deterministic gate run right before any reply tool fires.
+
+    Belt-and-suspenders: even after the LLM clears classification and confidence,
+    we re-check the incoming text and the drafted reply against hard rules. A
+    failure escalates to a human rather than sending.
+    """
+    if _should_escalate(message.text):
+        return False, "keyword_match"
+    text = reply.strip()
+    if not text:
+        return False, "empty_reply"
+    if len(text) > _MAX_REPLY_LEN:
+        return False, "reply_too_long"
+    lower = text.lower()
+    if any(phrase in lower for phrase in _BANNED_REPLY_PHRASES):
+        return False, "banned_phrase_in_reply"
+    return True, ""
+
+
 def _process_message(
     message: IncomingMessage,
     errors: list[str],
@@ -105,6 +133,12 @@ def _process_message(
             "reason": "escalate_flag" if result.escalate else "low_confidence",
             "confidence": result.confidence,
         })
+        return
+
+    # Final deterministic gate before any tool fires.
+    allowed, reason = _reply_passes_policy(message, result.suggested_reply)
+    if not allowed:
+        escalated.append({"id": message.id, "type": message.type, "reason": f"policy:{reason}"})
         return
 
     if message.type == "comment":

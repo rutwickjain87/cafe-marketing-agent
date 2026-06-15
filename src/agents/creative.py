@@ -7,6 +7,7 @@ from typing import Literal
 import anthropic
 from pydantic import BaseModel, field_validator, model_validator
 
+from src.schemas import PostAsset
 from src.state import AgentState
 from src.tracing import observe
 
@@ -250,12 +251,19 @@ def creative_node(state: AgentState) -> AgentState:
 
     caption = draft_caption(brief)
 
-    asset: dict = {
-        "caption": caption.caption,
-        "hashtags": caption.hashtags,
-        "cta": caption.cta,
-        "confidence": caption.confidence,
-    }
+    needs_review = caption.confidence < CONFIDENCE_THRESHOLD
+    post = PostAsset(
+        campaign_id=state.get("campaign_id", ""),
+        format=brief.format,
+        topic=brief.product,
+        variety=brief.variety,
+        caption=caption.caption,
+        hashtags=caption.hashtags,
+        cta=caption.cta,
+        confidence=caption.confidence,
+        approval_status="draft" if needs_review else "pending_approval",
+    )
+    asset = post.model_dump(mode="json")
     if caption.review_reason:
         asset["review_reason"] = caption.review_reason
 
@@ -263,5 +271,5 @@ def creative_node(state: AgentState) -> AgentState:
         **state,
         "creative_assets": [asset],
         "confidence_score": caption.confidence,
-        "human_review_required": caption.confidence < CONFIDENCE_THRESHOLD,
+        "human_review_required": needs_review,
     }

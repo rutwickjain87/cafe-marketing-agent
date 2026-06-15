@@ -32,13 +32,27 @@ on conflict do nothing;
 -- ---------------------------------------------------------------------------
 create table if not exists brand_posts (
   id           uuid primary key default gen_random_uuid(),
+  post_id      text,            -- stable PostAsset id; the publish idempotency key
   media_id     text unique,
   caption      text not null,
   pillar       text,
+  format       text,
+  permalink    text,
+  metrics      jsonb,           -- reach, impressions, likes… (learning loop)
   published_at timestamptz default now(),
   embedding    vector(1536),
   raw          jsonb
 );
+
+-- Migrations for existing deployments (safe to re-run)
+alter table brand_posts add column if not exists post_id   text;
+alter table brand_posts add column if not exists format    text;
+alter table brand_posts add column if not exists permalink text;
+alter table brand_posts add column if not exists metrics   jsonb;
+
+-- Idempotency: one published row per post_id. A second publish of the same
+-- post_id is rejected at the DB, not just in app code.
+create unique index if not exists brand_posts_post_id_key on brand_posts(post_id);
 
 -- IVFFlat index — build after ~100 rows are in the table
 -- create index on brand_posts using ivfflat (embedding vector_cosine_ops) with (lists = 100);

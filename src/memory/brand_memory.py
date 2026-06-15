@@ -128,22 +128,59 @@ def fetch_similar_posts(topic: str, k: int = 5) -> list[dict]:
         return []
 
 
+def find_published_media(post_id: str) -> str | None:
+    """Idempotency lookup: media_id if this post_id was already published, else None.
+
+    Lets the Publishing node skip a post that a previous run already published,
+    even after a graph resume. Returns None on any failure (fail-open to a fresh
+    publish is acceptable; the DB unique index on post_id is the backstop).
+    """
+    if not post_id or not _SUPABASE_AVAILABLE or not os.environ.get("SUPABASE_URL"):
+        return None
+    try:
+        client = _client()
+        result = (
+            client.table(_POSTS_TABLE)
+            .select("media_id")
+            .eq("post_id", post_id)
+            .limit(1)
+            .execute()
+        )
+        row = result.data[0] if result.data else None
+        if isinstance(row, dict) and row.get("media_id"):
+            return str(row["media_id"])
+    except Exception:
+        return None
+    return None
+
+
 def store_post(asset: dict) -> None:
-    """Persist a published asset to brand memory for future retrieval."""
+    """Persist a published asset to brand memory (learning loop + idempotency record).
+
+    Tolerant of both the PostAsset shape (`published_media_id`) and the legacy
+    `media_id` key. Never aborts the graph on failure.
+    """
     if not _SUPABASE_AVAILABLE or not os.environ.get("SUPABASE_URL"):
         return
 
+    media_id = asset.get("published_media_id") or asset.get("media_id") or ""
+    if not media_id:
+        return  # nothing was published — nothing to record
+
     try:
         caption = asset.get("caption", "")
-        embedding = _embed(caption)
         client = _client()
         client.table(_POSTS_TABLE).insert({
-            "media_id": asset.get("media_id", ""),
+            "post_id": asset.get("post_id"),
+            "media_id": media_id,
             "caption": caption,
             "pillar": asset.get("pillar", ""),
+            "format": asset.get("format"),
+            "permalink": asset.get("permalink"),
+            "metrics": asset.get("metrics"),
             "published_at": datetime.now(timezone.utc).isoformat(),
-            "embedding": embedding,
-            "raw": json.dumps(asset),
+            "embedding": _embed(caption),
+            "raw": json.dumps(asset, default=str),
         }).execute()
     except Exception:
         pass  # memory write failure must never abort the graph
