@@ -16,11 +16,18 @@ capability that a single cafe doesn't need yet.
 
 ## Tier 2 — "runs on its own" (the n8n operator layer)
 
-- [ ] **Scheduled posting** — n8n Schedule trigger calls the graph at planned times (no manual kickoff).
-- [ ] **Approve from your phone** — graph pauses at the gate → n8n sends an image+caption card to WhatsApp/Telegram with Approve/Reject → tap resumes the graph.
-- [ ] **Live comment/DM ingestion** — Meta webhook → n8n → Engagement (replaces the in-state queue).
+Operator API (`src/server/app.py`) + n8n workflows (`n8n/`) deliver this. Setup:
+[n8n-operator-setup.md](n8n-operator-setup.md).
+
+- [x] **Scheduled posting** — n8n 5-min cron → `POST /scheduled/dispatch` publishes due posts; optional daily kickoff → `POST /campaigns`.
+- [x] **Approve from your phone** — graph pauses at the gate → API sends a Telegram card with Approve/Reject → tap → n8n → `POST /runs/{id}/resume`.
+- [x] **Live comment/DM ingestion** — Meta webhook → `POST /webhooks/meta` (signature-verified) → Engagement node (replaces the in-state queue).
 - [ ] **Automated token refresh** — cron/n8n runs `scripts/refresh_ig_token.py` before the 60-day expiry.
-- [ ] **Scheduling state** — hold approved posts as `scheduled` until their `scheduled_at` (the field exists on `PostAsset`; the holding queue does not yet).
+- [x] **Scheduling state** — approved future-dated posts parked in `scheduled_posts`; dispatch publishes them when due, idempotent on `post_id`.
+
+Also added in this layer: **fal.ai image→video Reels** (`src/tools/fal_media.py`, async via
+the `media_submit`/`media_await` graph nodes + `POST /webhooks/fal`), auto-published as Reels
+after approval.
 
 ## Tier 3 — close the loop & basic ops
 

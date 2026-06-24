@@ -73,6 +73,31 @@ def upload_image(file_path: str, dest_name: str | None = None) -> str:
     )
     return client.storage.from_(_ARTIFACTS_BUCKET).get_public_url(dest)
 
+
+def upload_video(file_path: str, dest_name: str | None = None) -> str:
+    """Upload a local mp4 to the public Storage bucket and return its public URL.
+
+    Instagram fetches video_url server-side for Reels, so it must be a public HTTPS
+    MP4. Raises on failure — a missing video URL must stop the publish.
+    """
+    path = Path(file_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"video not found: {file_path}")
+
+    content_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
+    if content_type != "video/mp4":
+        raise ValueError(f"Instagram Reels require MP4; got {content_type} for {path.name}")
+
+    dest = dest_name or f"{datetime.now(timezone.utc):%Y%m%d-%H%M%S}-{path.name}"
+    client = _client()
+    client.storage.from_(_ARTIFACTS_BUCKET).upload(
+        dest,
+        path.read_bytes(),
+        {"content-type": content_type, "upsert": "true"},
+    )
+    return client.storage.from_(_ARTIFACTS_BUCKET).get_public_url(dest)
+
+
 _FALLBACK_PROFILE: dict = {
     "name": "Voodoo Momo",
     "instagram": "@voodoomomo",
@@ -182,6 +207,8 @@ def store_post(asset: dict) -> None:
             "caption": caption,
             "pillar": asset.get("pillar", ""),
             "format": asset.get("format"),
+            "media_type": asset.get("media_type", "image"),
+            "video_url": asset.get("video_url"),
             "permalink": asset.get("permalink"),
             "metrics": asset.get("metrics"),
             "published_at": datetime.now(timezone.utc).isoformat(),

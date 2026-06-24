@@ -25,6 +25,35 @@ class TestPostAsset:
         assert a.is_published and a.published_media_id == "media_42"
         assert a.approval_status == "published"
 
+    def test_video_render_lifecycle(self):
+        a = PostAsset(campaign_id="c1", media_type="video", image_url="https://x/y.jpg")
+        assert a.needs_render
+        assert a.publish_url is None  # a video has nothing to publish until its clip lands
+        a.start_render("req_1")
+        assert a.render_request_id == "req_1" and a.needs_render
+        a.mark_rendered("https://x/clip.mp4")
+        assert not a.needs_render
+        assert a.publish_url == "https://x/clip.mp4"  # video wins once present
+
+
+class TestVideoPublish:
+    def test_video_asset_uses_reel_container(self):
+        asset = PostAsset(campaign_id="c1", media_type="video",
+                          video_url="https://x/clip.mp4", caption="rainy evening momos")
+        with patch("src.agents.publishing.find_published_media", return_value=None), \
+             patch("src.agents.publishing.create_reel_container") as crc, \
+             patch("src.agents.publishing.create_media_container") as cmc, \
+             patch("src.agents.publishing.wait_for_container") as wait, \
+             patch("src.agents.publishing.publish_media") as pub, \
+             patch("src.agents.publishing.store_post"):
+            crc.return_value = type("C", (), {"container_id": "cont_1"})()
+            wait.return_value = type("S", (), {"status_code": "FINISHED"})()
+            pub.return_value = type("R", (), {"media_id": "m1", "permalink": "https://p"})()
+            updated, err = _publish_asset(asset)
+        assert err is None and updated.published_media_id == "m1"
+        crc.assert_called_once()       # reel path used
+        cmc.assert_not_called()        # image path skipped
+
 
 class TestPublishIdempotency:
     def test_skips_when_already_published_in_state(self):

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 from src.state import AgentState
+from src.schemas import PostAsset
 from src.agents.coordinator import coordinator_node
 from src.agents.strategy import strategy_node
 from src.agents.creative import creative_node
+from src.agents.media import media_submit_node, media_await_node, has_pending_render
 from src.agents.publishing import publishing_node
 from src.agents.analytics import analytics_node
 from src.agents.engagement.engagement import engagement_node
+from src.memory.schedule_store import enqueue_scheduled
 
 
 def _route_after_coordinator(state: AgentState) -> str:
@@ -20,35 +24,56 @@ def _route_after_coordinator(state: AgentState) -> str:
     return "strategy"
 
 
-def _route_after_creative(state: AgentState) -> str:
-    """Pause for human approval when confidence is low or draft needs review.
+def _route_after_media_submit(state: AgentState) -> str:
+    """Wait on fal renders when a reel clip is still pending; else go to approval."""
+    if has_pending_render(state):
+        return "media_await"
+    return "human_approval"
 
-    The graph halts at END with status='draft'. The operator sets approved=True
-    externally and resumes by re-invoking the graph with the persisted thread_id.
-    The approved invariant is then enforced in publishing_node itself.
-    """
-    if state.get("human_review_required"):
-        return "human_approval"
-    if not state.get("approved"):
-        return "human_approval"
-    return "publishing"
+
+def _route_after_media_await(state: AgentState) -> str:
+    """Loop back to the (interrupt-gated) await node until every clip has landed."""
+    if has_pending_render(state):
+        return "media_await"
+    return "human_approval"
 
 
 def _human_approval_node(state: AgentState) -> AgentState:
-    """Interrupt point — execution pauses here until the operator resumes.
+    """Pass-through checkpoint. Pausing is handled by interrupt_before=['human_approval'];
+    the operator resumes by setting approved + invoking with None (see resume_run)."""
+    return state
 
-    To approve: update state["approved"] = True and state["human_review_required"] = False,
-    then call graph.invoke(state, config={"configurable": {"thread_id": <id>}}).
-    """
-    from langgraph.types import interrupt  # lazy import — only needed at runtime
-    interrupt("Awaiting human approval of creative assets.")
-    return state  # unreachable; interrupt raises internally
+
+def _has_future_schedule(state: AgentState) -> bool:
+    now = datetime.now(timezone.utc)
+    for raw in state.get("creative_assets", []):
+        asset = PostAsset.model_validate(raw)
+        if asset.scheduled_at and asset.scheduled_at > now:
+            return True
+    return False
 
 
 def _route_after_approval(state: AgentState) -> str:
-    if state.get("approved"):
-        return "publishing"
-    return END
+    if not state.get("approved"):
+        return END
+    if _has_future_schedule(state):
+        return "schedule"
+    return "publishing"
+
+
+def _schedule_node(state: AgentState) -> AgentState:
+    """Park approved, future-dated assets in the holding queue; the dispatch cron
+    publishes them when due (see POST /scheduled/dispatch). Ends the run here."""
+    thread_id = state.get("thread_id", "")
+    now = datetime.now(timezone.utc)
+    scheduled: list[dict] = []
+    for raw in state.get("creative_assets", []):
+        asset = PostAsset.model_validate(raw)
+        if asset.scheduled_at and asset.scheduled_at > now:
+            asset.approval_status = "scheduled"
+            enqueue_scheduled(asset.model_dump(mode="json"), thread_id)
+        scheduled.append(asset.model_dump(mode="json"))
+    return {**state, "status": "scheduled", "creative_assets": scheduled}
 
 
 def _make_checkpointer():
@@ -60,10 +85,26 @@ def _make_checkpointer():
     if supabase_url and supabase_key:
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
-            # Supabase exposes a Postgres connection string via the connection pooler
+            from psycopg.rows import dict_row
+            from psycopg_pool import ConnectionPool
+            # Supabase exposes a Postgres connection string via the connection pooler.
+            # from_conn_string() is a context manager (closes the conn on exit), so for a
+            # long-lived server we own a pool and hand PostgresSaver a live one instead.
             db_url = os.environ.get("SUPABASE_DB_URL", "")
             if db_url:
-                return PostgresSaver.from_conn_string(db_url)
+                pool = ConnectionPool(
+                    conninfo=db_url,
+                    min_size=1,
+                    # Supabase's session-mode pooler caps the whole project at 15 clients;
+                    # stay well under so migrations/scripts can still connect.
+                    max_size=5,
+                    open=True,
+                    # prepare_threshold=0 keeps us compatible with the pgbouncer pooler
+                    kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+                )
+                saver = PostgresSaver(pool)
+                saver.setup()  # idempotent: creates checkpoint tables on first run
+                return saver
         except ImportError:
             pass  # langgraph-checkpoint-postgres not installed; fall through
 
@@ -77,7 +118,10 @@ def build_graph() -> StateGraph:
     g.add_node("coordinator", coordinator_node)
     g.add_node("strategy", strategy_node)
     g.add_node("creative", creative_node)
+    g.add_node("media_submit", media_submit_node)
+    g.add_node("media_await", media_await_node)
     g.add_node("human_approval", _human_approval_node)
+    g.add_node("schedule", _schedule_node)
     g.add_node("publishing", publishing_node)
     g.add_node("engagement", engagement_node)
     g.add_node("analytics", analytics_node)
@@ -90,21 +134,31 @@ def build_graph() -> StateGraph:
         {"strategy": "strategy", END: END},
     )
     g.add_edge("strategy", "creative")
+    g.add_edge("creative", "media_submit")
     g.add_conditional_edges(
-        "creative",
-        _route_after_creative,
-        {"publishing": "publishing", "human_approval": "human_approval"},
+        "media_submit",
+        _route_after_media_submit,
+        {"media_await": "media_await", "human_approval": "human_approval"},
+    )
+    g.add_conditional_edges(
+        "media_await",
+        _route_after_media_await,
+        {"media_await": "media_await", "human_approval": "human_approval"},
     )
     g.add_conditional_edges(
         "human_approval",
         _route_after_approval,
-        {"publishing": "publishing", END: END},
+        {"publishing": "publishing", "schedule": "schedule", END: END},
     )
+    g.add_edge("schedule", END)
     g.add_edge("publishing", "engagement")
     g.add_edge("engagement", "analytics")
     g.add_edge("analytics", END)
 
-    return g.compile(checkpointer=checkpointer, interrupt_before=["human_approval"])
+    return g.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["media_await", "human_approval"],
+    )
 
 
 graph = build_graph()

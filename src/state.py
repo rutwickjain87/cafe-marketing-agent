@@ -5,6 +5,7 @@ from typing import TypedDict
 class AgentState(TypedDict, total=False):
     # Campaign identity
     campaign_id: str
+    thread_id: str  # checkpointer thread; set by the operator API so nodes can reference it
     status: str  # draft | approved | scheduled | published | done
 
     # Input

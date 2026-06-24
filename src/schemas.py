@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field
 
 PostFormat = Literal["feed_post", "carousel", "reel"]
 
+MediaType = Literal["image", "video"]
+
 ApprovalStatus = Literal[
     "draft",            # created, not yet ready for review
     "pending_approval", # waiting at the human gate
@@ -54,8 +56,14 @@ class PostAsset(BaseModel):
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list)
     cta: str = ""
+    media_type: MediaType = "image"
     image_url: str | None = None
     image_prompt: str | None = None
+    # video (reels) — rendered async by fal.ai from image_url; see src/tools/fal_media.py
+    video_url: str | None = None
+    video_prompt: str | None = None
+    thumbnail_url: str | None = None
+    render_request_id: str | None = None  # fal queue job id; idempotency key for re-render
     confidence: float = 0.0
 
     # --- lifecycle ---
@@ -74,6 +82,26 @@ class PostAsset(BaseModel):
 
     def caption_with_hashtags(self) -> str:
         return f"{self.caption}\n\n{' '.join(self.hashtags)}".strip()
+
+    def start_render(self, request_id: str) -> None:
+        """Record a submitted fal.ai render job. Stamps the job id for idempotent re-render."""
+        self.render_request_id = request_id
+        self.updated_at = _now()
+
+    def mark_rendered(self, video_url: str, thumbnail_url: str | None = None) -> None:
+        self.video_url = video_url
+        self.thumbnail_url = thumbnail_url
+        self.updated_at = _now()
+
+    @property
+    def needs_render(self) -> bool:
+        """A video asset whose clip has not been produced yet."""
+        return self.media_type == "video" and not self.video_url
+
+    @property
+    def publish_url(self) -> str | None:
+        """The asset the publisher hands to Meta — video for reels, image otherwise."""
+        return self.video_url if self.media_type == "video" else self.image_url
 
     def start_publish_attempt(self) -> str:
         """Begin a new publish attempt; returns its id. Use before calling the API."""

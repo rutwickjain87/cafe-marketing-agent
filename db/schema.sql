@@ -45,10 +45,12 @@ create table if not exists brand_posts (
 );
 
 -- Migrations for existing deployments (safe to re-run)
-alter table brand_posts add column if not exists post_id   text;
-alter table brand_posts add column if not exists format    text;
-alter table brand_posts add column if not exists permalink text;
-alter table brand_posts add column if not exists metrics   jsonb;
+alter table brand_posts add column if not exists post_id    text;
+alter table brand_posts add column if not exists format     text;
+alter table brand_posts add column if not exists permalink  text;
+alter table brand_posts add column if not exists metrics    jsonb;
+alter table brand_posts add column if not exists media_type text default 'image';
+alter table brand_posts add column if not exists video_url  text;
 
 -- Idempotency: one published row per post_id. A second publish of the same
 -- post_id is rejected at the DB, not just in app code.
@@ -56,6 +58,23 @@ create unique index if not exists brand_posts_post_id_key on brand_posts(post_id
 
 -- IVFFlat index — build after ~100 rows are in the table
 -- create index on brand_posts using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+
+-- ---------------------------------------------------------------------------
+-- scheduled_posts: holding queue for approved, future-dated posts.
+-- POST /scheduled/dispatch reads due rows and publishes them exactly once.
+-- ---------------------------------------------------------------------------
+create table if not exists scheduled_posts (
+  post_id      text primary key,   -- stable PostAsset id; dispatch is idempotent on this
+  campaign_id  text,
+  thread_id    text,               -- originating graph run (for tracing)
+  scheduled_at timestamptz,
+  status       text default 'scheduled',  -- scheduled | dispatched
+  asset        jsonb not null,     -- full serialized PostAsset
+  created_at   timestamptz default now()
+);
+
+create index if not exists scheduled_posts_due_idx
+  on scheduled_posts (status, scheduled_at);
 
 -- ---------------------------------------------------------------------------
 -- match_brand_posts: RPC used by src/memory/brand_memory.py
@@ -83,10 +102,19 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Row-level security: service-role key bypasses; anon key blocked
 -- ---------------------------------------------------------------------------
-alter table brand_profile enable row level security;
-alter table brand_posts    enable row level security;
+alter table brand_profile   enable row level security;
+alter table brand_posts     enable row level security;
+alter table scheduled_posts enable row level security;
 
+-- drop-then-create so this block is re-runnable (Postgres has no
+-- `create policy if not exists`); a half-applied schema otherwise rolls back
+-- the whole file when run as one transaction.
+drop policy if exists "service role full access" on brand_profile;
 create policy "service role full access" on brand_profile
   using (auth.role() = 'service_role');
+drop policy if exists "service role full access" on brand_posts;
 create policy "service role full access" on brand_posts
+  using (auth.role() = 'service_role');
+drop policy if exists "service role full access" on scheduled_posts;
+create policy "service role full access" on scheduled_posts
   using (auth.role() = 'service_role');

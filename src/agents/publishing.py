@@ -7,6 +7,7 @@ from src.tools.meta_graph import (
     MetaError,
     MetaErrorCode,
     create_media_container,
+    create_reel_container,
     wait_for_container,
     publish_media,
 )
@@ -34,20 +35,27 @@ def _publish_asset(asset: PostAsset) -> tuple[PostAsset, str | None]:
         asset.mark_published(prior_media_id, asset.permalink)
         return asset, None
 
-    if not asset.image_url:
+    is_video = asset.media_type == "video"
+    media_url = asset.publish_url
+    if not media_url:
         asset.approval_status = "failed"
-        return asset, f"post {asset.post_id} has no image_url — skipped"
+        kind = "video_url" if is_video else "image_url"
+        return asset, f"post {asset.post_id} has no {kind} — skipped"
 
     asset.start_publish_attempt()  # stamps a publish_attempt_id for tracing
-    container = create_media_container(asset.image_url, asset.caption_with_hashtags())
+    caption = asset.caption_with_hashtags()
+    if is_video:
+        container = create_reel_container(media_url, caption)
+    else:
+        container = create_media_container(media_url, caption)
     if isinstance(container, MetaError):
         if container.code == MetaErrorCode.AUDIO_UNAVAILABLE:
             asset.approval_status = "manual_queue"
             return asset, None  # caller routes to manual_publish_queue
         asset.approval_status = "failed"
-        return asset, f"create_media_container failed: {container.code} — {container.recovery}"
+        return asset, f"create container failed: {container.code} — {container.recovery}"
 
-    status = wait_for_container(container.container_id)
+    status = wait_for_container(container.container_id, is_video=is_video)
     if isinstance(status, MetaError):
         asset.approval_status = "failed"
         return asset, f"poll failed: {status.code} — {status.recovery}"

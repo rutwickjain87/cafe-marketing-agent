@@ -1,0 +1,275 @@
+"""Operator API — the FastAPI bridge between the n8n layer (and Meta/fal webhooks)
+and the in-process LangGraph.
+
+n8n owns the clock/human-facing work (scheduled dispatch, daily kickoff, Telegram
+approve/reject); fal and Meta call their webhooks here directly because they need
+Python-side processing (video upload, signature checks). All operator endpoints sit
+behind a shared-secret header (X-Operator-Token); webhooks authenticate per their
+provider (fal: token query param; Meta: HMAC signature).
+
+Run:  uvicorn src.server.app:app --host 0.0.0.0 --port 8080
+"""
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
+import os
+import tempfile
+import uuid
+from pathlib import Path
+
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+
+from src.agents.engagement.engagement import engagement_node
+from src.agents.publishing import publishing_node
+from src.graph import build_graph
+from src.memory.brand_memory import upload_video
+from src.memory.schedule_store import fetch_due, mark_dispatched
+from src.tools.fal_media import FalError, parse_webhook
+from src.tools.notify import notify_text, send_approval_card
+
+_log = logging.getLogger(__name__)
+
+app = FastAPI(title="Voodoo Momo Operator API")
+graph = build_graph()
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+def require_operator_token(x_operator_token: str | None = Header(default=None)) -> None:
+    expected = os.environ.get("OPERATOR_API_TOKEN", "")
+    if not expected or not x_operator_token or not hmac.compare_digest(x_operator_token, expected):
+        raise HTTPException(status_code=401, detail="invalid operator token")
+
+
+# ---------------------------------------------------------------------------
+# Graph helpers
+# ---------------------------------------------------------------------------
+
+def _config(thread_id: str) -> dict:
+    return {"configurable": {"thread_id": thread_id}}
+
+
+def _pause_point(thread_id: str) -> str | None:
+    """The node the graph is paused before, or None if it has finished."""
+    snap = graph.get_state(_config(thread_id))
+    return snap.next[0] if snap.next else None
+
+
+def _notify_if_awaiting_approval(thread_id: str) -> None:
+    if _pause_point(thread_id) != "human_approval":
+        return
+    snap = graph.get_state(_config(thread_id))
+    for asset in snap.values.get("creative_assets", []):
+        send_approval_card(thread_id, asset)
+
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+
+class CampaignRequest(BaseModel):
+    brief: dict
+
+
+class CampaignResponse(BaseModel):
+    thread_id: str
+    campaign_id: str
+    status: str
+    paused_at: str | None = None
+
+
+class ResumeRequest(BaseModel):
+    approved: bool
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/healthz")
+def healthz() -> dict:
+    return {"ok": True}
+
+
+@app.post("/campaigns", response_model=CampaignResponse, dependencies=[Depends(require_operator_token)])
+def start_campaign(req: CampaignRequest) -> CampaignResponse:
+    thread_id = f"thread_{uuid.uuid4().hex[:12]}"
+    campaign_id = f"camp_{uuid.uuid4().hex[:12]}"
+    state = {
+        "campaign_id": campaign_id,
+        "thread_id": thread_id,
+        "brief": req.brief,
+        "status": "draft",
+    }
+    graph.invoke(state, _config(thread_id))
+    paused = _pause_point(thread_id)
+    if paused == "human_approval":
+        _notify_if_awaiting_approval(thread_id)
+    snap = graph.get_state(_config(thread_id))
+    return CampaignResponse(
+        thread_id=thread_id,
+        campaign_id=campaign_id,
+        status=snap.values.get("status", "draft"),
+        paused_at=paused,
+    )
+
+
+@app.post("/runs/{thread_id}/resume", dependencies=[Depends(require_operator_token)])
+def resume_run(thread_id: str, req: ResumeRequest) -> dict:
+    if _pause_point(thread_id) != "human_approval":
+        raise HTTPException(status_code=409, detail="run is not awaiting approval")
+    graph.update_state(
+        _config(thread_id),
+        {"approved": req.approved, "human_review_required": False},
+    )
+    graph.invoke(None, _config(thread_id))
+    snap = graph.get_state(_config(thread_id))
+    status = snap.values.get("status", "unknown")
+    if not req.approved:
+        notify_text(f"🚫 Post rejected by operator (thread {thread_id}).")
+    return {"thread_id": thread_id, "status": status, "paused_at": _pause_point(thread_id)}
+
+
+@app.post("/webhooks/fal")
+async def fal_webhook(request: Request, thread_id: str, post_id: str, token: str | None = None) -> dict:
+    expected = os.environ.get("OPERATOR_API_TOKEN", "")
+    if expected and (not token or not hmac.compare_digest(token, expected)):
+        raise HTTPException(status_code=401, detail="invalid webhook token")
+
+    body = _parse_json_bytes(await request.body())
+    result = parse_webhook(body)
+    if isinstance(result, FalError):
+        notify_text(f"⚠️ fal render failed for {post_id}: {result.message}")
+        # Resume anyway so the run doesn't hang — media_submit already degraded on submit
+        # failure; a post-submit failure here is rare, surface it and leave the run paused.
+        raise HTTPException(status_code=200, detail=result.message)
+
+    public_url = _rehost_video(result.video_url)
+    _patch_asset_video(thread_id, post_id, public_url, result.thumbnail_url)
+    graph.invoke(None, _config(thread_id))
+    _notify_if_awaiting_approval(thread_id)
+    return {"thread_id": thread_id, "post_id": post_id, "paused_at": _pause_point(thread_id)}
+
+
+@app.get("/webhooks/meta")
+def meta_verify(request: Request) -> PlainTextResponse:
+    params = request.query_params
+    verify_token = os.environ.get("META_WEBHOOK_VERIFY_TOKEN", "")
+    if params.get("hub.mode") == "subscribe" and params.get("hub.verify_token") == verify_token:
+        return PlainTextResponse(params.get("hub.challenge", ""))
+    raise HTTPException(status_code=403, detail="verification failed")
+
+
+@app.post("/webhooks/meta")
+async def meta_webhook(request: Request) -> dict:
+    raw = await request.body()
+    if not _verify_meta_signature(request.headers.get("X-Hub-Signature-256", ""), raw):
+        raise HTTPException(status_code=401, detail="invalid signature")
+    payload = _parse_json_bytes(raw)
+    messages = _normalize_meta_events(payload)
+    if not messages:
+        return {"handled": 0}
+
+    result = engagement_node({"engagement_queue": messages})
+    escalated = result.get("escalated_messages", [])
+    if escalated:
+        notify_text(f"🙋 {len(escalated)} message(s) escalated for human review.")
+    return {"handled": len(messages), "escalated": len(escalated)}
+
+
+@app.post("/scheduled/dispatch", dependencies=[Depends(require_operator_token)])
+def dispatch_scheduled() -> dict:
+    due = fetch_due()
+    published = 0
+    for row in due:
+        asset = row.get("asset") or {}
+        state = {
+            "approved": True,
+            "campaign_id": asset.get("campaign_id", ""),
+            "creative_assets": [asset],
+        }
+        out = publishing_node(state)
+        for err in out.get("errors", []):
+            notify_text(f"⚠️ Scheduled publish error: {err}")
+        mark_dispatched(asset.get("post_id", ""))
+        published += 1
+    return {"due": len(due), "dispatched": published}
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _parse_json_bytes(raw: bytes) -> dict:
+    import json
+    try:
+        return json.loads(raw or b"{}")
+    except (ValueError, TypeError):
+        return {}
+
+
+def _verify_meta_signature(header: str, raw: bytes) -> bool:
+    secret = os.environ.get("META_APP_SECRET", "")
+    if not secret:
+        _log.warning("META_APP_SECRET not set — rejecting webhook")
+        return False
+    if not header.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode(), raw, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(header.split("=", 1)[1], expected)
+
+
+def _normalize_meta_events(payload: dict) -> list[dict]:
+    """Flatten an Instagram webhook payload into IncomingMessage dicts."""
+    messages: list[dict] = []
+    for entry in payload.get("entry", []):
+        for change in entry.get("changes", []):
+            if change.get("field") == "comments":
+                v = change.get("value", {})
+                if v.get("id") and v.get("text"):
+                    messages.append({"id": v["id"], "type": "comment", "text": v["text"]})
+        for msg in entry.get("messaging", []):
+            m = msg.get("message", {})
+            sender = msg.get("sender", {}).get("id")
+            if m.get("text") and sender:
+                messages.append({
+                    "id": m.get("mid", sender),
+                    "type": "dm",
+                    "text": m["text"],
+                    "thread_id": sender,
+                })
+    return messages
+
+
+def _rehost_video(fal_url: str) -> str:
+    """Download the fal clip and re-host it as a public MP4 on Supabase.
+
+    Instagram fetches video_url server-side and fal URLs are short-lived, so we
+    rehost on the same public bucket used for images.
+    """
+    with httpx.Client(timeout=120, follow_redirects=True) as client:
+        resp = client.get(fal_url)
+        resp.raise_for_status()
+    tmp = Path(tempfile.gettempdir()) / f"reel-{uuid.uuid4().hex[:8]}.mp4"
+    tmp.write_bytes(resp.content)
+    try:
+        return upload_video(str(tmp))
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def _patch_asset_video(thread_id: str, post_id: str, video_url: str, thumbnail_url: str | None) -> None:
+    snap = graph.get_state(_config(thread_id))
+    assets = list(snap.values.get("creative_assets", []))
+    for asset in assets:
+        if asset.get("post_id") == post_id:
+            asset["video_url"] = video_url
+            asset["thumbnail_url"] = thumbnail_url
+    graph.update_state(_config(thread_id), {"creative_assets": assets})

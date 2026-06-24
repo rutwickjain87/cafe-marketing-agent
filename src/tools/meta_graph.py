@@ -32,6 +32,7 @@ _BASE = "https://graph.instagram.com/v22.0"
 _GRAPH_ROOT = "https://graph.instagram.com"  # token-management endpoints are unversioned
 _POLL_INTERVAL_S = 5
 _POLL_MAX_ATTEMPTS = 24  # 2 minutes at 5s intervals
+_POLL_MAX_ATTEMPTS_VIDEO = 60  # Reels containers transcode slower — 5 minutes
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +158,15 @@ def _handle_response(resp: httpx.Response) -> Union[dict, MetaError]:
                 message=msg,
                 recovery="link_facebook_page_to_instagram_account",
             )
+        # Trending / copyrighted audio cannot be auto-published on Reels via the API.
+        # Meta surfaces this as a media error mentioning audio (subcode 2207026 is the
+        # common "media format" variant). Route to manual_publish_queue, never retry.
+        if subcode == 2207026 or "audio" in msg.lower():
+            return MetaError(
+                code=MetaErrorCode.AUDIO_UNAVAILABLE,
+                message=msg,
+                recovery="route_to_manual_queue",
+            )
         return MetaError(
             code=MetaErrorCode.API_ERROR,
             message=msg,
@@ -223,6 +233,31 @@ def create_media_container(
     return MediaContainer(container_id=result["id"])
 
 
+def create_reel_container(
+    video_url: str,
+    caption: str,
+) -> MediaContainer | MetaError:
+    """Create a REELS container from a public video URL (step 1 for video posts).
+
+    Mirrors create_media_container but for the Reels media type. The Instagram-Login
+    API rejects Reels using trending audio on automated publishes — that surfaces as
+    AUDIO_UNAVAILABLE and the caller routes the asset to manual_publish_queue.
+    """
+    payload: dict = {
+        "media_type": "REELS",
+        "video_url": video_url,
+        "caption": caption,
+        "access_token": _token(),
+    }
+    with httpx.Client(timeout=30) as client:
+        resp = client.post(f"{_BASE}/{_ig_user_id()}/media", data=payload)
+
+    result = _handle_response(resp)
+    if isinstance(result, MetaError):
+        return result
+    return MediaContainer(container_id=result["id"])
+
+
 def poll_container_status(container_id: str) -> ContainerStatus | MetaError:
     """Poll a single time. Caller loops until status_code == FINISHED or ERROR."""
     params = {
@@ -241,9 +276,13 @@ def poll_container_status(container_id: str) -> ContainerStatus | MetaError:
     )
 
 
-def wait_for_container(container_id: str) -> ContainerStatus | MetaError:
-    """Block until container is FINISHED, ERROR, or max attempts exhausted."""
-    for _ in range(_POLL_MAX_ATTEMPTS):
+def wait_for_container(container_id: str, *, is_video: bool = False) -> ContainerStatus | MetaError:
+    """Block until container is FINISHED, ERROR, or max attempts exhausted.
+
+    Reels containers transcode slower, so pass is_video=True for a longer budget.
+    """
+    max_attempts = _POLL_MAX_ATTEMPTS_VIDEO if is_video else _POLL_MAX_ATTEMPTS
+    for _ in range(max_attempts):
         status = poll_container_status(container_id)
         if isinstance(status, MetaError):
             return status
@@ -253,7 +292,7 @@ def wait_for_container(container_id: str) -> ContainerStatus | MetaError:
 
     return MetaError(
         code=MetaErrorCode.CONTAINER_NOT_READY,
-        message=f"Container {container_id} did not finish within {_POLL_MAX_ATTEMPTS * _POLL_INTERVAL_S}s",
+        message=f"Container {container_id} did not finish within {max_attempts * _POLL_INTERVAL_S}s",
         recovery="retry_publish_later",
     )
 
