@@ -1,5 +1,16 @@
 # Cafe Marketing Agent — Project Memory
 
+## Ponytail (Lazy Senior Dev Mode)
+Before writing any code, execute this logic ladder:
+1. Does this feature or code absolutely need to exist?
+2. Does the standard library already handle it?
+3. Is there a native platform/browser feature available?
+4. Is there an existing project dependency that solves this?
+5. Can this be achieved in a single line?
+
+Prefer the absolute simplest, shortest working change. Do not over-engineer.
+
+
 ## Architecture conventions
 
 - All agents are LangGraph nodes defined in `src/graph.py`
