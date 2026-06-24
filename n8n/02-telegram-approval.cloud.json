@@ -1,0 +1,79 @@
+{
+  "name": "Voodoo Momo — Telegram Approval (Cloud)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["callback_query"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "On Approve/Reject tap",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [260, 300],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ON_IMPORT", "name": "Voodoo Momo Bot" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.callback_query?.data || '';\nconst [action, threadId] = data.split(':');\nreturn [{ json: { thread_id: threadId, approved: action === 'approve' } }];"
+      },
+      "id": "parse-callback",
+      "name": "Parse callback_data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://baby-episodes-tide-centuries.trycloudflare.com/runs/{{ $json.thread_id }}/resume",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"approved\": {{ $json.approved }}\n}",
+        "options": {}
+      },
+      "id": "resume-run",
+      "name": "Resume graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 300],
+      "credentials": {
+        "httpHeaderAuth": { "id": "REPLACE_ON_IMPORT", "name": "Operator Token (X-Operator-Token)" }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('On Approve/Reject tap').item.json.callback_query.message.chat.id }}",
+        "text": "={{ $json.status === 'published' ? '✅ Published.' : ('Status: ' + $json.status) }}",
+        "additionalFields": {}
+      },
+      "id": "confirm",
+      "name": "Confirm to operator",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1040, 300],
+      "credentials": {
+        "telegramApi": { "id": "REPLACE_ON_IMPORT", "name": "Voodoo Momo Bot" }
+      }
+    }
+  ],
+  "connections": {
+    "On Approve/Reject tap": {
+      "main": [[{ "node": "Parse callback_data", "type": "main", "index": 0 }]]
+    },
+    "Parse callback_data": {
+      "main": [[{ "node": "Resume graph", "type": "main", "index": 0 }]]
+    },
+    "Resume graph": {
+      "main": [[{ "node": "Confirm to operator", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "description": "n8n CLOUD variant of 02-telegram-approval.json. URL hardcoded (update on tunnel restart); operator auth via Header Auth credential; Telegram nodes use a telegramApi credential. No $env dependency."
+  }
+}
