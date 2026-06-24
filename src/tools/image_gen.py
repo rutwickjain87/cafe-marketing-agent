@@ -45,7 +45,10 @@ def generate_image(
         mime = mimetypes.guess_type(ref_path.name)[0] or "image/jpeg"
         contents.append(types.Part.from_bytes(data=ref_path.read_bytes(), mime_type=mime))
 
-    response = _client().models.generate_content(
+    # Bind the client to a local: a temporary genai.Client is GC'd mid-call, and its
+    # finalizer closes the httpx transport ("client has been closed").
+    client = _client()
+    response = client.models.generate_content(
         model=_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(response_modalities=["Image"]),

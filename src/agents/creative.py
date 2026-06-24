@@ -1,15 +1,32 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import tempfile
+from pathlib import Path
 from typing import Literal
 
 import anthropic
 from pydantic import BaseModel, field_validator, model_validator
 
+from src.memory.brand_memory import upload_image
 from src.schemas import PostAsset
 from src.state import AgentState
+from src.tools.image_gen import generate_image
 from src.tracing import observe
+
+_log = logging.getLogger(__name__)
+
+# Mascot reference for character-consistent brand imagery; only fed to the image
+# model for personality/community posts (see _render_post_image).
+_MASCOT_REF = Path(__file__).resolve().parents[2] / "assets" / "brand" / "mascot-panda.jpeg"
+
+# Appended to every image prompt so generated photos stay on-palette and text-free.
+_IMAGE_STYLE_ANCHOR = (
+    "Warm gold, deep red and orange palette. Street-food styling, appetizing, "
+    "natural steam, shallow depth of field. No text, captions, or logos in the image."
+)
 
 CONFIDENCE_THRESHOLD = 0.7
 MAX_RETRIES = 2
@@ -80,6 +97,7 @@ Output JSON ONLY — no prose, no markdown fences, just the raw JSON object:
   "caption": "<string>",
   "hashtags": ["<#tag>", ...],
   "cta": "<single soft-invite string, also appears at the end of caption>",
+  "image_prompt": "<vivid, specific description of the photo to generate for this post: the dish/scene, framing, mood, setting. Describe food appetisingly. Mention the panda mascot ONLY for personality or community posts — never force it into a plain product shot>",
   "confidence": <float 0.0–1.0>
 }
 If confidence < 0.7, add: "review_reason": "<brief explanation of uncertainty>"
@@ -99,6 +117,7 @@ _FEW_SHOT: list[dict] = [
                 "#AchariMomo", "#ChoilaMomo", "#MomoTime", "#PuneFood", "#StreetFoodPune",
             ],
             "cta": "Come find us in Wagholi this evening.",
+            "image_prompt": "Close-up, top-down of steaming Achari momos in a dark ceramic bowl, tangy spiced glaze, fresh steam rising, warm evening light on a rustic wooden table",
             "confidence": 0.92,
         }),
     },
@@ -119,6 +138,7 @@ _FEW_SHOT: list[dict] = [
                 "#MomoLovers", "#HimalayanFood", "#MomoTime", "#PuneFood", "#StreetFoodPune",
             ],
             "cta": "What's your go-to?",
+            "image_prompt": "Overhead spread of many momo varieties on rustic plates — steamed, fried, tandoori — a vibrant assortment with dipping sauces, cozy Himalayan-style table setting",
             "confidence": 0.88,
         }),
     },
@@ -137,6 +157,7 @@ class Caption(BaseModel):
     hashtags: list[str]
     cta: str
     confidence: float
+    image_prompt: str | None = None
     review_reason: str | None = None
 
     @field_validator("caption")
@@ -173,6 +194,15 @@ class Caption(BaseModel):
             if phrase in lower:
                 raise ValueError(f"banned phrase in caption: '{phrase}'")
         return self
+
+
+def _extract_json_object(raw: str) -> str:
+    """Pull the first {...} object out of a model reply, tolerating code fences/prose."""
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise json.JSONDecodeError("no JSON object in model output", raw or "", 0)
+    return raw[start : end + 1]
 
 
 @observe(name="draft_caption")
@@ -217,7 +247,7 @@ def draft_caption(brief: PostBrief) -> Caption:
         last_raw = response.content[0].text.strip()
 
         try:
-            data = json.loads(last_raw)
+            data = json.loads(_extract_json_object(last_raw))
             return Caption(**data)
         except (json.JSONDecodeError, ValueError) as exc:
             last_error = str(exc)
@@ -235,23 +265,48 @@ def draft_caption(brief: PostBrief) -> Caption:
     )
 
 
+def _render_post_image(image_prompt: str, post_id: str) -> str:
+    """Generate the post image with Gemini and upload it as a public JPEG; return its URL.
+
+    The mascot reference is fed only when the prompt actually calls for the panda, so
+    plain product shots aren't forced to include him. Raises on any failure — a missing
+    image must stop the publish, never ship silently.
+    """
+    prompt = f"{image_prompt}. {_IMAGE_STYLE_ANCHOR}"
+    wants_mascot = any(w in image_prompt.lower() for w in ("panda", "mascot"))
+    refs = [str(_MASCOT_REF)] if wants_mascot and _MASCOT_REF.is_file() else None
+
+    out = Path(tempfile.gettempdir()) / f"{post_id}.jpg"
+    try:
+        generate_image(prompt, str(out), reference_paths=refs)
+        return upload_image(str(out))
+    finally:
+        out.unlink(missing_ok=True)
+
+
+def _fallback_image_prompt(brief: PostBrief) -> str:
+    return f"{brief.product}, close-up, fresh and steaming, appetising street-food styling"
+
+
 def creative_node(state: AgentState) -> AgentState:
-    """Drafts one caption for the brief in state. Phase 1 entry point."""
+    """Drafts one caption + generates the post image for the brief in state."""
     brief_data = state.get("brief", {})
+    errors = list(state.get("errors", []))
 
     try:
         brief = PostBrief(**brief_data)
     except ValueError as exc:
         return {
             **state,
-            "errors": state.get("errors", []) + [f"Invalid post brief: {exc}"],
+            "errors": errors + [f"Invalid post brief: {exc}"],
             "human_review_required": True,
             "confidence_score": 0.0,
         }
 
     caption = draft_caption(brief)
 
-    needs_review = caption.confidence < CONFIDENCE_THRESHOLD
+    # Never downgrade an upstream review flag (e.g. a degraded strategy run).
+    needs_review = caption.confidence < CONFIDENCE_THRESHOLD or state.get("human_review_required", False)
     post = PostAsset(
         campaign_id=state.get("campaign_id", ""),
         format=brief.format,
@@ -260,6 +315,7 @@ def creative_node(state: AgentState) -> AgentState:
         caption=caption.caption,
         hashtags=caption.hashtags,
         cta=caption.cta,
+        image_prompt=caption.image_prompt,
         confidence=caption.confidence,
         approval_status="draft" if needs_review else "pending_approval",
     )
@@ -267,9 +323,18 @@ def creative_node(state: AgentState) -> AgentState:
     if caption.review_reason:
         asset["review_reason"] = caption.review_reason
 
+    image_prompt = caption.image_prompt or _fallback_image_prompt(brief)
+    try:
+        asset["image_url"] = _render_post_image(image_prompt, post.post_id)
+    except Exception as exc:  # external boundary: surface, flag for review, never ship blind
+        _log.warning("Image generation failed for %s: %s", post.post_id, exc)
+        errors.append(f"{post.post_id}: image generation failed — {exc}; flagged for human review")
+        needs_review = True
+
     return {
         **state,
         "creative_assets": [asset],
         "confidence_score": caption.confidence,
         "human_review_required": needs_review,
+        "errors": errors,
     }

@@ -88,6 +88,15 @@ class ContentCalendar(BaseModel):
         return v
 
 
+def _extract_json_object(raw: str) -> str:
+    """Pull the first {...} object out of a model reply, tolerating code fences/prose."""
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        raise json.JSONDecodeError("no JSON object in model output", raw or "", 0)
+    return raw[start : end + 1]
+
+
 @observe(name="build_calendar")
 def build_calendar(brief: dict, week_start: date | None = None) -> ContentCalendar:
     """Call Claude Sonnet to produce a 7-day content calendar from the campaign brief."""
@@ -104,13 +113,13 @@ def build_calendar(brief: dict, week_start: date | None = None) -> ContentCalend
 
     resp = client.messages.create(
         model=_MODEL,
-        max_tokens=1024,
+        max_tokens=2048,
         system=_SYSTEM,
         messages=[{"role": "user", "content": user_msg}],
     )
 
     raw = resp.content[0].text.strip()
-    data = json.loads(raw)
+    data = json.loads(_extract_json_object(raw))
     return ContentCalendar(**data)
 
 
