@@ -47,6 +47,16 @@
 | Community / local love | 1×/week | Shoutout to Wagholi locals, a regular's favourite order, or a local supplier |
 | Offer / event | As needed | Happy hours 12 PM–5 PM, seasonal special, new variety launch |
 
+## Image & visual style (AI-generated post images)
+
+These are hard rules for every generated post image — enforced in the Creative node's image-prompt anchor (`src/agents/creative.py`).
+
+- **Momos are the hero.** The dish is the sole focus, shot close and appetising with natural steam.
+- **No people.** Never include people, hands, human figures, crowds, or diners — not in the foreground and not in the background.
+- **Brand-palette background.** Backgrounds are clean, styled surfaces in the Voodoo Momo palette — warm gold, deep red, orange — with subtle Himalayan warmth (prayer-flag colours, temple-gate tones). Never a busy restaurant or street scene.
+- **No text or logos** baked into the image.
+- **Mascot 🐼 only when it fits** — the panda mascot appears only for personality/community posts, never forced into a plain product shot.
+
 ## Banned phrases & patterns
 
 - "Best momos in Pune / India / the world" — unverifiable, sounds desperate

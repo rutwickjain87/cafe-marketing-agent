@@ -9,12 +9,11 @@ Classifies incoming comments and DMs with Claude Haiku, then:
 from __future__ import annotations
 
 import json
-import os
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel
 
+from src.llm import complete, extract_json
 from src.state import AgentState
 from src.tools.meta_graph import (
     MetaError,
@@ -73,14 +72,13 @@ Output JSON only:
 
 
 def _classify(message: IncomingMessage) -> ClassificationResult:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-    resp = client.messages.create(
-        model=_MODEL,
-        max_tokens=256,
+    raw = complete(
         system=_CLASSIFY_SYSTEM,
         messages=[{"role": "user", "content": f"Message: {message.text}"}],
-    )
-    data = json.loads(resp.content[0].text.strip())
+        model=_MODEL,
+        max_tokens=256,
+    ).strip()
+    data = json.loads(extract_json(raw))
     return ClassificationResult(**data)
 
 

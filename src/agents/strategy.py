@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import date
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel, field_validator
 
+from src.llm import complete, extract_json
 from src.state import AgentState
 from src.tracing import observe
 
@@ -88,22 +87,11 @@ class ContentCalendar(BaseModel):
         return v
 
 
-def _extract_json_object(raw: str) -> str:
-    """Pull the first {...} object out of a model reply, tolerating code fences/prose."""
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise json.JSONDecodeError("no JSON object in model output", raw or "", 0)
-    return raw[start : end + 1]
-
-
 @observe(name="build_calendar")
 def build_calendar(brief: dict, week_start: date | None = None) -> ContentCalendar:
-    """Call Claude Sonnet to produce a 7-day content calendar from the campaign brief."""
+    """Generate a 7-day content calendar from the campaign brief (strategy LLM pass)."""
     if week_start is None:
         week_start = date.today()
-
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     user_msg = (
         f"Campaign brief:\n{json.dumps(brief, indent=2)}\n\n"
@@ -111,15 +99,13 @@ def build_calendar(brief: dict, week_start: date | None = None) -> ContentCalend
         "Produce the 7-day content calendar."
     )
 
-    resp = client.messages.create(
-        model=_MODEL,
-        max_tokens=2048,
+    raw = complete(
         system=_SYSTEM,
         messages=[{"role": "user", "content": user_msg}],
-    )
-
-    raw = resp.content[0].text.strip()
-    data = json.loads(_extract_json_object(raw))
+        model=_MODEL,
+        max_tokens=2048,
+    ).strip()
+    data = json.loads(extract_json(raw))
     return ContentCalendar(**data)
 
 

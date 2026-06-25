@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import tempfile
 from pathlib import Path
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel, field_validator, model_validator
 
+from src.llm import complete, extract_json
 from src.memory.brand_memory import upload_image
 from src.schemas import PostAsset
 from src.state import AgentState
@@ -22,10 +21,15 @@ _log = logging.getLogger(__name__)
 # model for personality/community posts (see _render_post_image).
 _MASCOT_REF = Path(__file__).resolve().parents[2] / "assets" / "brand" / "mascot-panda.jpeg"
 
-# Appended to every image prompt so generated photos stay on-palette and text-free.
+# Appended to every image prompt so generated photos stay on-brand. Hard rules:
+# momos are the hero, NO people, and the background is the Voodoo Momo palette.
 _IMAGE_STYLE_ANCHOR = (
-    "Warm gold, deep red and orange palette. Street-food styling, appetizing, "
-    "natural steam, shallow depth of field. No text, captions, or logos in the image."
+    "The momos are the sole hero of the shot. ABSOLUTELY NO people, no hands, no human "
+    "figures, no crowds, no diners in frame or background. Background is a clean, styled "
+    "surface and backdrop in the Voodoo Momo brand palette — warm gold, deep red, and "
+    "orange — with subtle Himalayan warmth (prayer-flag colours, temple-gate tones), "
+    "never a busy restaurant or street scene. Street-food styling, appetising, natural "
+    "steam, shallow depth of field. No text, captions, or logos in the image."
 )
 
 CONFIDENCE_THRESHOLD = 0.7
@@ -97,7 +101,7 @@ Output JSON ONLY — no prose, no markdown fences, just the raw JSON object:
   "caption": "<string>",
   "hashtags": ["<#tag>", ...],
   "cta": "<single soft-invite string, also appears at the end of caption>",
-  "image_prompt": "<vivid, specific description of the photo to generate for this post: the dish/scene, framing, mood, setting. Describe food appetisingly. Mention the panda mascot ONLY for personality or community posts — never force it into a plain product shot>",
+  "image_prompt": "<vivid, specific description of the photo to generate: the dish, framing, mood. Keep the momos the hero with a clean background in the brand palette (warm gold/deep red/orange). NEVER include people, hands, or crowds. Mention the panda mascot ONLY for personality/community posts — never force it into a plain product shot>",
   "confidence": <float 0.0–1.0>
 }
 If confidence < 0.7, add: "review_reason": "<brief explanation of uncertainty>"
@@ -196,20 +200,9 @@ class Caption(BaseModel):
         return self
 
 
-def _extract_json_object(raw: str) -> str:
-    """Pull the first {...} object out of a model reply, tolerating code fences/prose."""
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise json.JSONDecodeError("no JSON object in model output", raw or "", 0)
-    return raw[start : end + 1]
-
-
 @observe(name="draft_caption")
 def draft_caption(brief: PostBrief) -> Caption:
-    """Call Claude Haiku to draft a caption; retry up to MAX_RETRIES on validation failure."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
+    """Draft a caption (LLM pass); retry up to MAX_RETRIES on validation failure."""
     messages: list[dict] = list(_FEW_SHOT) + [
         {
             "role": "user",
@@ -237,17 +230,15 @@ def draft_caption(brief: PostBrief) -> Caption:
                 },
             ]
 
-        response = client.messages.create(
-            model=_DRAFT_MODEL,
-            max_tokens=512,
+        last_raw = complete(
             system=_SYSTEM_PROMPT,
             messages=messages,
-        )
-
-        last_raw = response.content[0].text.strip()
+            model=_DRAFT_MODEL,
+            max_tokens=512,
+        ).strip()
 
         try:
-            data = json.loads(_extract_json_object(last_raw))
+            data = json.loads(extract_json(last_raw))
             return Caption(**data)
         except (json.JSONDecodeError, ValueError) as exc:
             last_error = str(exc)
