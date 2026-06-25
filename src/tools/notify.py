@@ -86,6 +86,24 @@ def send_approval_card(thread_id: str, asset: dict) -> bool:
         return False
 
 
+def answer_callback_query(callback_query_id: str | None, text: str = "") -> bool:
+    """Acknowledge an inline-button tap so Telegram stops showing the loading spinner."""
+    cfg = _config()
+    if cfg is None or not callback_query_id:
+        return False
+    token, _ = cfg
+    try:
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(
+                f"{_API}/bot{token}/answerCallbackQuery",
+                json={"callback_query_id": callback_query_id, "text": text},
+            )
+        return resp.status_code < 400
+    except httpx.HTTPError as exc:
+        _log.warning("answerCallbackQuery failed: %s", exc)
+        return False
+
+
 def notify_text(message: str) -> bool:
     """Send a plain ops alert. Returns True if delivered."""
     cfg = _config()

@@ -30,7 +30,7 @@ from src.graph import build_graph
 from src.memory.brand_memory import upload_video
 from src.memory.schedule_store import fetch_due, mark_dispatched
 from src.tools.fal_media import FalError, parse_webhook
-from src.tools.notify import notify_text, send_approval_card
+from src.tools.notify import answer_callback_query, notify_text, send_approval_card
 
 _log = logging.getLogger(__name__)
 
@@ -121,20 +121,77 @@ def start_campaign(req: CampaignRequest) -> CampaignResponse:
     )
 
 
-@app.post("/runs/{thread_id}/resume", dependencies=[Depends(require_operator_token)])
-def resume_run(thread_id: str, req: ResumeRequest) -> dict:
+def _acknowledge_resume(approved: bool, values: dict) -> None:
+    """Tell the operator on Telegram what happened after they approve/reject."""
+    if not approved:
+        notify_text("🚫 Rejected — post discarded.")
+        return
+    asset = (values.get("creative_assets") or [{}])[0]
+    permalink = asset.get("permalink")
+    status = asset.get("approval_status")
+    if status == "published" or permalink:
+        notify_text(f"✅ Approved & published.\n{permalink or ''}".strip())
+    elif status == "manual_queue":
+        notify_text("✅ Approved — routed to the manual publish queue (trending audio).")
+    else:
+        errs = values.get("errors") or []
+        notify_text(f"⚠️ Approved but publish failed: {errs[-1] if errs else 'see logs'}")
+
+
+def _resume_run(thread_id: str, approved: bool) -> dict:
+    """Resume a run paused at approval, send a Telegram acknowledgement, report status."""
     if _pause_point(thread_id) != "human_approval":
-        raise HTTPException(status_code=409, detail="run is not awaiting approval")
+        return {"thread_id": thread_id, "status": "not_awaiting", "paused_at": _pause_point(thread_id)}
+    if approved:
+        # Instant feedback — publishing then takes ~10-15s of Meta API calls before
+        # the final "published" ack below.
+        notify_text("✅ Approved — publishing now…")
     graph.update_state(
         _config(thread_id),
-        {"approved": req.approved, "human_review_required": False},
+        {"approved": approved, "human_review_required": False},
     )
     graph.invoke(None, _config(thread_id))
     snap = graph.get_state(_config(thread_id))
-    status = snap.values.get("status", "unknown")
-    if not req.approved:
-        notify_text(f"🚫 Post rejected by operator (thread {thread_id}).")
-    return {"thread_id": thread_id, "status": status, "paused_at": _pause_point(thread_id)}
+    _acknowledge_resume(approved, snap.values)
+    return {
+        "thread_id": thread_id,
+        "status": snap.values.get("status", "unknown"),
+        "paused_at": _pause_point(thread_id),
+    }
+
+
+@app.post("/runs/{thread_id}/resume", dependencies=[Depends(require_operator_token)])
+def resume_run(thread_id: str, req: ResumeRequest) -> dict:
+    result = _resume_run(thread_id, req.approved)
+    if result["status"] == "not_awaiting":
+        raise HTTPException(status_code=409, detail="run is not awaiting approval")
+    return result
+
+
+@app.post("/webhooks/telegram")
+async def telegram_webhook(
+    request: Request,
+    x_telegram_bot_api_secret_token: str | None = Header(default=None),
+) -> dict:
+    """Handle Approve/Reject inline-button taps from the Telegram approval card.
+
+    Secured by the Telegram secret_token set on setWebhook (we use OPERATOR_API_TOKEN).
+    callback_data is 'approve:<thread_id>' / 'reject:<thread_id>'.
+    """
+    expected = os.environ.get("OPERATOR_API_TOKEN", "")
+    if expected and not hmac.compare_digest(x_telegram_bot_api_secret_token or "", expected):
+        raise HTTPException(status_code=401, detail="invalid telegram secret")
+
+    update = _parse_json_bytes(await request.body())
+    cq = update.get("callback_query")
+    if not cq:
+        return {"handled": False}
+
+    action, _, thread_id = (cq.get("data") or "").partition(":")
+    approved = action == "approve"
+    answer_callback_query(cq.get("id"), "Approving ✅" if approved else "Rejecting 🚫")
+    result = _resume_run(thread_id, approved)
+    return {"handled": True, **result}
 
 
 @app.post("/webhooks/fal")
