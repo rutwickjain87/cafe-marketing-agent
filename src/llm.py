@@ -20,6 +20,8 @@ import os
 import anthropic
 import httpx
 
+from src import tracing
+
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 _DEFAULT_OPENROUTER_MODEL = "z-ai/glm-5.2"
 # Reasoning models (GLM-5.2 etc.) spend completion tokens on a hidden reasoning
@@ -40,11 +42,24 @@ def _provider() -> str:
 def complete(*, system: str, messages: list[dict], model: str, max_tokens: int = 1024) -> str:
     """Return the assistant's text for a system prompt + user/assistant messages.
 
-    `model` is the Anthropic model id, used only when LLM_PROVIDER=anthropic.
+    `model` is the Anthropic model id, used only when LLM_PROVIDER=anthropic; on
+    OpenRouter the OPENROUTER_MODEL is used. The call is traced to Langfuse as a
+    generation (model + token usage).
     """
-    if _provider() == "anthropic":
-        return _anthropic_complete(system, messages, model, max_tokens)
-    return _openrouter_complete(system, messages, max_tokens)
+    provider = _provider()
+    gen_model = model if provider == "anthropic" else os.environ.get("OPENROUTER_MODEL", _DEFAULT_OPENROUTER_MODEL)
+    with tracing.generation(
+        name=f"llm.{provider}",
+        model=gen_model,
+        input={"system": system, "messages": messages},
+        metadata={"provider": provider},
+    ) as gen:
+        if provider == "anthropic":
+            text, usage = _anthropic_complete(system, messages, model, max_tokens)
+        else:
+            text, usage = _openrouter_complete(system, messages, gen_model, max_tokens)
+        gen.update(output=text, usage_details=usage)
+        return text
 
 
 def extract_json(raw: str) -> str:
@@ -56,7 +71,7 @@ def extract_json(raw: str) -> str:
     return raw[start : end + 1]
 
 
-def _anthropic_complete(system: str, messages: list[dict], model: str, max_tokens: int) -> str:
+def _anthropic_complete(system: str, messages: list[dict], model: str, max_tokens: int) -> tuple[str, dict]:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     resp = client.messages.create(
         model=model,
@@ -64,14 +79,14 @@ def _anthropic_complete(system: str, messages: list[dict], model: str, max_token
         system=system,
         messages=messages,
     )
-    return resp.content[0].text
+    usage = {"input": resp.usage.input_tokens, "output": resp.usage.output_tokens}
+    return resp.content[0].text, usage
 
 
-def _openrouter_complete(system: str, messages: list[dict], max_tokens: int) -> str:
+def _openrouter_complete(system: str, messages: list[dict], model: str, max_tokens: int) -> tuple[str, dict]:
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         raise LLMError("OPENROUTER_API_KEY is not set")
-    model = os.environ.get("OPENROUTER_MODEL", _DEFAULT_OPENROUTER_MODEL)
     payload = {
         "model": model,
         "max_tokens": max_tokens + _REASONING_HEADROOM,
@@ -99,4 +114,14 @@ def _openrouter_complete(system: str, messages: list[dict], max_tokens: int) -> 
             f"OpenRouter returned empty content (finish_reason={choice.get('finish_reason')}) "
             f"for model {model} — likely max_tokens exhausted by reasoning"
         )
-    return content
+    u = data.get("usage") or {}
+    usage = {
+        k: v
+        for k, v in {
+            "input": u.get("prompt_tokens"),
+            "output": u.get("completion_tokens"),
+            "total": u.get("total_tokens"),
+        }.items()
+        if v is not None
+    }
+    return content, usage

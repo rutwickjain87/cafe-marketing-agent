@@ -17,13 +17,16 @@ import logging
 import os
 import tempfile
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from src import tracing
 from src.agents.engagement.engagement import engagement_node
 from src.agents.publishing import publishing_node
 from src.graph import build_graph
@@ -34,7 +37,60 @@ from src.tools.notify import answer_callback_query, notify_text, send_approval_c
 
 _log = logging.getLogger(__name__)
 
-app = FastAPI(title="Voodoo Momo Operator API")
+# ---------------------------------------------------------------------------
+# In-process scheduler (replaces n8n's cron). BackgroundScheduler runs jobs on
+# its own threads inside this uvicorn process.
+# ---------------------------------------------------------------------------
+scheduler = BackgroundScheduler(timezone="UTC")
+
+
+def _job_dispatch() -> None:
+    """Publish any due scheduled posts (idempotent). Runs on an interval."""
+    try:
+        _log.info("scheduled dispatch: %s", dispatch_scheduled())
+    except Exception as exc:  # job boundary — one failure must not kill the scheduler
+        _log.exception("scheduled dispatch failed")
+        notify_text(f"⚠️ Scheduled dispatch error: {exc}")
+
+
+def _job_daily_kickoff() -> None:
+    """Start one campaign/day, paused at approval. Opt-in via env."""
+    product = os.environ.get("DAILY_KICKOFF_PRODUCT", "").strip()
+    if not product:
+        _log.warning("daily kickoff skipped: DAILY_KICKOFF_PRODUCT not set")
+        return
+    try:
+        start_campaign(CampaignRequest(brief={
+            "product": product, "goal": "foot_traffic",
+            "format": "feed_post", "duration_days": 1,
+        }))
+    except Exception as exc:
+        _log.exception("daily kickoff failed")
+        notify_text(f"⚠️ Daily kickoff error: {exc}")
+
+
+def _start_scheduler() -> None:
+    if os.environ.get("SCHEDULER_ENABLED", "true").strip().lower() != "true":
+        _log.info("scheduler disabled (SCHEDULER_ENABLED != true)")
+        return
+    minutes = int(os.environ.get("DISPATCH_INTERVAL_MINUTES", "5"))
+    scheduler.add_job(_job_dispatch, "interval", minutes=minutes, id="dispatch", replace_existing=True)
+    if os.environ.get("DAILY_KICKOFF_ENABLED", "false").strip().lower() == "true":
+        scheduler.add_job(_job_daily_kickoff, "cron", hour=9, minute=0, id="daily_kickoff", replace_existing=True)
+    scheduler.start()
+    _log.info("APScheduler started — dispatch every %d min", minutes)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    _start_scheduler()
+    yield
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+    tracing.flush()  # ensure buffered Langfuse events are sent on shutdown
+
+
+app = FastAPI(title="Voodoo Momo Operator API", lifespan=lifespan)
 graph = build_graph()
 
 
