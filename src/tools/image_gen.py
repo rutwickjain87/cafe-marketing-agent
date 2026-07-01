@@ -1,72 +1,50 @@
-"""Gemini image generation (Nano Banana) — Creative node image tool.
+"""Pluggable image generation — a stable facade over swappable providers.
 
-Renders a post image from a text prompt plus optional reference images (e.g. the
-panda mascot) to keep brand assets consistent. Always writes a JPEG, since
-Instagram's publishing API rejects PNG.
+Callers use `generate_image(...)`; the backend is chosen by the IMAGE_PROVIDER env
+var (default "fal"). Adding a provider means registering a name -> factory and
+setting IMAGE_PROVIDER — no caller changes. See src/tools/image_providers/.
 """
 from __future__ import annotations
 
-import mimetypes
 import os
-from io import BytesIO
-from pathlib import Path
-
-from google import genai
-from google.genai import types
-from PIL import Image
-
-# Nano Banana 2: reference-capable, strong character consistency, free tier + ~$0.04/image.
-_MODEL = "gemini-3.1-flash-image"
+from importlib import import_module
+from typing import Callable, Protocol
 
 
-def _client() -> genai.Client:
-    key = os.environ.get("GOOGLE_API_KEY")
-    if not key:
-        raise RuntimeError("GOOGLE_API_KEY is not set")
-    return genai.Client(api_key=key)
+class ImageProvider(Protocol):
+    def generate(
+        self, prompt: str, out_path: str, reference_paths: list[str] | None = None
+    ) -> str: ...
+
+
+# name -> "module:Class" (lazy-imported) or a zero-arg factory. Lazy import keeps a
+# provider's optional deps off the import path until that provider is selected.
+_REGISTRY: dict[str, "str | Callable[[], ImageProvider]"] = {
+    "fal": "src.tools.image_providers.fal:FalImageProvider",
+}
+
+
+def register_provider(name: str, factory: "str | Callable[[], ImageProvider]") -> None:
+    """Register an image provider: a 'module:Class' import path or a zero-arg factory."""
+    _REGISTRY[name] = factory
+
+
+def get_provider(name: str | None = None) -> ImageProvider:
+    name = name or os.environ.get("IMAGE_PROVIDER", "fal")
+    try:
+        entry = _REGISTRY[name]
+    except KeyError:
+        raise ValueError(
+            f"unknown image provider: {name!r} (registered: {sorted(_REGISTRY)})"
+        ) from None
+    if callable(entry):
+        return entry()
+    module_path, _, class_name = entry.partition(":")
+    return getattr(import_module(module_path), class_name)()
 
 
 def generate_image(
-    prompt: str,
-    out_path: str,
-    reference_paths: list[str] | None = None,
+    prompt: str, out_path: str, reference_paths: list[str] | None = None
 ) -> str:
-    """Generate an image and write it as JPEG to out_path. Raises on failure.
-
-    reference_paths are passed to the model as visual references for brand
-    consistency (mascot, palette). A missing image must stop a publish, so this
-    raises rather than returning a sentinel.
-    """
-    contents: list = [prompt]
-    for ref in reference_paths or []:
-        ref_path = Path(ref)
-        if not ref_path.is_file():
-            raise FileNotFoundError(f"reference image not found: {ref}")
-        mime = mimetypes.guess_type(ref_path.name)[0] or "image/jpeg"
-        contents.append(types.Part.from_bytes(data=ref_path.read_bytes(), mime_type=mime))
-
-    # Bind the client to a local: a temporary genai.Client is GC'd mid-call, and its
-    # finalizer closes the httpx transport ("client has been closed").
-    client = _client()
-    response = client.models.generate_content(
-        model=_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(response_modalities=["Image"]),
-    )
-
-    raw = _extract_image_bytes(response)
-    if raw is None:
-        raise RuntimeError("Gemini returned no image data (possibly blocked or text-only)")
-
-    Image.open(BytesIO(raw)).convert("RGB").save(out_path, format="JPEG", quality=90)
-    return out_path
-
-
-def _extract_image_bytes(response) -> bytes | None:
-    for candidate in response.candidates or []:
-        parts = getattr(candidate.content, "parts", None) or []
-        for part in parts:
-            inline = getattr(part, "inline_data", None)
-            if inline and inline.data:
-                return inline.data
-    return None
+    """Generate an image with the configured provider; write JPEG to out_path. Raises on failure."""
+    return get_provider().generate(prompt, out_path, reference_paths)

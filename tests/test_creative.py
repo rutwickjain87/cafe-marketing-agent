@@ -137,7 +137,8 @@ class TestCreativeNode:
             "errors": [],
             "manual_publish_queue": [],
         }
-        with patch("src.agents.creative.draft_caption", return_value=self._mock_caption()):
+        with patch("src.agents.creative.draft_caption", return_value=self._mock_caption()), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
             result = creative_node(state)
 
         assert len(result["creative_assets"]) == 1
@@ -166,7 +167,8 @@ class TestCreativeNode:
             "errors": [],
             "manual_publish_queue": [],
         }
-        with patch("src.agents.creative.draft_caption", return_value=low_conf):
+        with patch("src.agents.creative.draft_caption", return_value=low_conf), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
             result = creative_node(state)
 
         assert result["human_review_required"] is True

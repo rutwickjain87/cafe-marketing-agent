@@ -257,7 +257,7 @@ def draft_caption(brief: PostBrief) -> Caption:
 
 
 def _render_post_image(image_prompt: str, post_id: str) -> str:
-    """Generate the post image with Gemini and upload it as a public JPEG; return its URL.
+    """Generate the post image via the configured provider and upload it as a public JPEG; return its URL.
 
     The mascot reference is fed only when the prompt actually calls for the panda, so
     plain product shots aren't forced to include him. Raises on any failure — a missing
