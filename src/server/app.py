@@ -216,6 +216,33 @@ def _resume_run(thread_id: str, approved: bool) -> dict:
     }
 
 
+def _decide_post(thread_id: str, post_id: str, approved: bool) -> dict:
+    """Record a per-post approve/reject, then resume the run only once every post is decided.
+
+    Replaces the single global `approved` flag for the weekly multi-post flow: each tap sets
+    one asset's approval_status; the graph stays paused until none remain pending_approval."""
+    if _pause_point(thread_id) != "human_approval":
+        return {"status": "not_awaiting"}
+
+    assets = list(graph.get_state(_config(thread_id)).values.get("creative_assets", []))
+    for asset in assets:
+        if asset.get("post_id") == post_id:
+            asset["approval_status"] = "approved" if approved else "rejected"
+    graph.update_state(_config(thread_id), {"creative_assets": assets})
+
+    pending = [a for a in assets if a.get("approval_status") in ("pending_approval", "draft")]
+    if pending:
+        return {"decided": post_id, "approved": approved, "remaining": len(pending)}
+
+    any_approved = any(a.get("approval_status") == "approved" for a in assets)
+    graph.update_state(_config(thread_id), {"approved": any_approved, "human_review_required": False})
+    notify_text("✅ All posts decided — publishing approved ones now…" if any_approved
+                else "🚫 All posts rejected — nothing to publish.")
+    graph.invoke(None, _config(thread_id))
+    out = graph.get_state(_config(thread_id)).values
+    return {"resumed": True, "any_approved": any_approved, "status": out.get("status", "unknown")}
+
+
 @app.post("/runs/{thread_id}/resume", dependencies=[Depends(require_operator_token)])
 def resume_run(thread_id: str, req: ResumeRequest) -> dict:
     result = _resume_run(thread_id, req.approved)
@@ -243,10 +270,12 @@ async def telegram_webhook(
     if not cq:
         return {"handled": False}
 
-    action, _, thread_id = (cq.get("data") or "").partition(":")
+    action, _, rest = (cq.get("data") or "").partition(":")
+    thread_id, _, post_id = rest.partition(":")
     approved = action == "approve"
     answer_callback_query(cq.get("id"), "Approving ✅" if approved else "Rejecting 🚫")
-    result = _resume_run(thread_id, approved)
+    # Per-post cards carry the post_id; legacy thread-level cards fall back to bulk resume.
+    result = _decide_post(thread_id, post_id, approved) if post_id else _resume_run(thread_id, approved)
     return {"handled": True, **result}
 
 

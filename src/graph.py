@@ -69,6 +69,10 @@ def _schedule_node(state: AgentState) -> AgentState:
     scheduled: list[dict] = []
     for raw in state.get("creative_assets", []):
         asset = PostAsset.model_validate(raw)
+        # A rejected post is never scheduled/dispatched — pass it through untouched.
+        if asset.approval_status == "rejected":
+            scheduled.append(asset.model_dump(mode="json"))
+            continue
         if asset.scheduled_at and asset.scheduled_at > now:
             asset.approval_status = "scheduled"
             enqueue_scheduled(asset.model_dump(mode="json"), thread_id)

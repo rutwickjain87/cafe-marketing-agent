@@ -78,6 +78,40 @@ class TestPublishIdempotency:
             publishing_node({"approved": False, "creative_assets": []})
 
 
+class TestPerPostApprovalGate:
+    def _state(self, status):
+        asset = PostAsset(campaign_id="c1", caption="hi", image_url="https://x/y.jpg",
+                          approval_status=status)
+        return {"approved": True, "campaign_id": "c1", "manual_publish_queue": [],
+                "errors": [], "creative_assets": [asset.model_dump(mode="json")]}
+
+    def test_rejected_asset_is_never_published(self):
+        with patch("src.agents.publishing.find_published_media", return_value=None), \
+             patch("src.agents.publishing.create_media_container") as cmc:
+            result = publishing_node(self._state("rejected"))
+        cmc.assert_not_called()  # compliance: a rejected post must never reach the Meta API
+        assert result["creative_assets"][0]["approval_status"] == "rejected"
+
+    def test_scheduled_asset_is_not_published_in_this_run(self):
+        with patch("src.agents.publishing.find_published_media", return_value=None), \
+             patch("src.agents.publishing.create_media_container") as cmc:
+            publishing_node(self._state("scheduled"))
+        cmc.assert_not_called()  # future-dated posts publish via the dispatch cron, not here
+
+    def test_approved_asset_is_published(self):
+        with patch("src.agents.publishing.find_published_media", return_value=None), \
+             patch("src.agents.publishing.create_media_container") as cmc, \
+             patch("src.agents.publishing.wait_for_container") as wait, \
+             patch("src.agents.publishing.publish_media") as pub, \
+             patch("src.agents.publishing.store_post"):
+            cmc.return_value = type("C", (), {"container_id": "cont_1"})()
+            wait.return_value = type("S", (), {"status_code": "FINISHED"})()
+            pub.return_value = type("R", (), {"media_id": "m1", "permalink": "https://p"})()
+            result = publishing_node(self._state("approved"))
+        cmc.assert_called_once()
+        assert result["creative_assets"][0]["approval_status"] == "published"
+
+
 class TestEngagementPolicyGate:
     def _msg(self, text="nice place"):
         return IncomingMessage(id="1", type="comment", text=text)

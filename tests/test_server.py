@@ -70,6 +70,39 @@ def test_resume_approve_advances(client):
     fake.invoke.assert_called_once()
 
 
+def _telegram_tap(client, data, assets):
+    fake = MagicMock()
+    fake.get_state.return_value = _snapshot("human_approval", assets=assets)
+    with patch.object(server, "graph", fake), patch.object(server, "notify_text"), \
+         patch.object(server, "answer_callback_query"):
+        resp = client.post(
+            "/webhooks/telegram",
+            json={"callback_query": {"id": "cq", "data": data}},
+            headers={"X-Telegram-Bot-Api-Secret-Token": TOKEN},
+        )
+    return resp, fake
+
+
+def test_per_post_tap_records_without_resuming_while_others_pending(client):
+    resp, fake = _telegram_tap(
+        client, "approve:thread_1:p1",
+        assets=[{"post_id": "p1", "approval_status": "pending_approval"},
+                {"post_id": "p2", "approval_status": "pending_approval"}],
+    )
+    assert resp.status_code == 200
+    fake.invoke.assert_not_called()  # p2 still pending → do not resume/publish yet
+
+
+def test_per_post_tap_resumes_once_all_decided(client):
+    resp, fake = _telegram_tap(
+        client, "reject:thread_1:p2",
+        assets=[{"post_id": "p1", "approval_status": "approved"},
+                {"post_id": "p2", "approval_status": "pending_approval"}],
+    )
+    assert resp.status_code == 200
+    fake.invoke.assert_called_once()  # all decided → resume
+
+
 def test_meta_verify_echoes_challenge(client):
     resp = client.get("/webhooks/meta", params={
         "hub.mode": "subscribe",

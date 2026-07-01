@@ -90,6 +90,12 @@ def publishing_node(state: AgentState) -> AgentState:
     errors = list(state.get("errors", []))
 
     for raw in state.get("creative_assets", []):
+        # Per-post gate: a rejected post must never be published; a scheduled (future)
+        # post publishes via the dispatch cron, not in this run. Pass both through untouched.
+        if raw.get("approval_status") in ("rejected", "scheduled"):
+            published.append(dict(raw))
+            continue
+
         asset, err = _publish_asset(_coerce_asset(dict(raw), campaign_id))
         if err:
             errors.append(err)

@@ -32,11 +32,11 @@ def _config() -> tuple[str, str] | None:
     return token, chat_id
 
 
-def _approval_keyboard(thread_id: str) -> dict:
+def _approval_keyboard(thread_id: str, post_id: str) -> dict:
     return {
         "inline_keyboard": [[
-            {"text": "✅ Approve", "callback_data": f"approve:{thread_id}"},
-            {"text": "❌ Reject", "callback_data": f"reject:{thread_id}"},
+            {"text": "✅ Approve", "callback_data": f"approve:{thread_id}:{post_id}"},
+            {"text": "❌ Reject", "callback_data": f"reject:{thread_id}:{post_id}"},
         ]]
     }
 
@@ -56,7 +56,7 @@ def send_approval_card(thread_id: str, asset: dict) -> bool:
     hashtags = " ".join(asset.get("hashtags", []))
     text = f"🐼 Approve this post?\n\n{caption}\n\n{hashtags}".strip()
     media_url = asset.get("video_url") or asset.get("image_url")
-    reply_markup = _approval_keyboard(thread_id)
+    reply_markup = _approval_keyboard(thread_id, asset.get("post_id", ""))
 
     try:
         with httpx.Client(timeout=20) as client:
