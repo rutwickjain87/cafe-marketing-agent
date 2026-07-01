@@ -78,8 +78,10 @@ restaurant needs **no architecture changes** — only content and credentials:
    - `src/agents/engagement/engagement.py` → reply tone / policy keywords
 4. **Brand assets** — replace `assets/brand/*` (mascot, menu, poster) with the new
    restaurant's. The mascot reference drives image character-consistency.
-5. **Project memory** — `CLAUDE.md` describes Voodoo Momo's conventions + brand profile;
-   update the brand-specific lines.
+5. **Project memory & playbook** — `CLAUDE.md` describes Voodoo Momo's conventions +
+   brand profile, and `docs/growth-strategy.md` is a Voodoo-Momo-specific Instagram
+   growth playbook. Rewrite both for the new brand. Set `POST_HOUR`/`POST_TZ` for the
+   new location's timezone.
 6. **Infra** — a new Supabase project (run `db/schema.sql`), a new Instagram-Login app +
    token ([docs/instagram-api-setup.md](docs/instagram-api-setup.md)), and a new Telegram bot.
 
