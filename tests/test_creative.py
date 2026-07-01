@@ -192,3 +192,72 @@ class TestCreativeNode:
         result = creative_node(state)
         assert result["human_review_required"] is True
         assert len(result["errors"]) == 1
+
+
+def _fanout_state(strategy=None, brief=None):
+    return {
+        "campaign_id": "camp-fan",
+        "status": "draft",
+        "brief": brief or {"product": "Momo", "goal": "awareness", "format": "feed_post"},
+        "strategy": strategy,
+        "creative_assets": [],
+        "approved": False,
+        "human_review_required": False,
+        "confidence_score": 0.0,
+        "brand_profile": {},
+        "past_posts": [],
+        "errors": [],
+        "manual_publish_queue": [],
+    }
+
+
+_CAL = {
+    "week_start": "2026-07-06",
+    "goal": "foot_traffic",
+    "posts": [
+        {"day_offset": 0, "pillar": "product_spotlight", "format": "feed_post",
+         "topic": "Achari Momo", "brief": "tangy evening", "variety": "Achari"},
+        {"day_offset": 2, "pillar": "behind_the_scenes", "format": "feed_post",
+         "topic": "Steamer in action", "brief": "prep shot", "variety": None},
+        {"day_offset": 4, "pillar": "community", "format": "carousel",
+         "topic": "Wagholi regulars", "brief": "local love", "variety": None},
+    ],
+}
+
+
+class TestCreativeFanOut:
+    def _cap(self, conf=0.9):
+        return Caption(caption=VALID_CAPTION_FEED, hashtags=VALID_HASHTAGS,
+                       cta="Come find us.", confidence=conf, image_prompt="momos")
+
+    def test_fans_out_all_calendar_posts(self):
+        with patch("src.agents.creative.draft_caption", return_value=self._cap()), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
+            result = creative_node(_fanout_state(strategy=_CAL))
+        assets = result["creative_assets"]
+        assert len(assets) == 3
+        assert [a["topic"] for a in assets] == ["Achari Momo", "Steamer in action", "Wagholi regulars"]
+        assert [a["format"] for a in assets] == ["feed_post", "feed_post", "carousel"]
+        assert assets[0]["variety"] == "Achari"
+
+    def test_scheduled_at_follows_day_offset(self):
+        with patch("src.agents.creative.draft_caption", return_value=self._cap()), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
+            result = creative_node(_fanout_state(strategy=_CAL))
+        dates = [a["scheduled_at"][:10] for a in result["creative_assets"]]
+        assert dates == ["2026-07-06", "2026-07-08", "2026-07-10"]
+
+    def test_empty_calendar_falls_back_to_single_brief(self):
+        with patch("src.agents.creative.draft_caption", return_value=self._cap()), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
+            result = creative_node(_fanout_state(strategy={"posts": []}))
+        assert len(result["creative_assets"]) == 1
+        assert result["creative_assets"][0]["topic"] == "Momo"
+
+    def test_one_low_confidence_post_flags_review(self):
+        caps = [self._cap(0.9), self._cap(0.5), self._cap(0.9)]
+        with patch("src.agents.creative.draft_caption", side_effect=caps), \
+             patch("src.agents.creative._render_post_image", return_value="https://img.test/x.jpg"):
+            result = creative_node(_fanout_state(strategy=_CAL))
+        assert result["human_review_required"] is True
+        assert result["confidence_score"] == 0.5

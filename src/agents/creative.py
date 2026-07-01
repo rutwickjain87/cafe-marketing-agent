@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import tempfile
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ValidationError, field_validator, model_validator
 
 from src.llm import complete, extract_json
 from src.memory.brand_memory import upload_image
@@ -154,6 +157,7 @@ class PostBrief(BaseModel):
     goal: str
     format: PostFormat
     variety: str | None = None
+    direction: str | None = None  # 1-line creative direction from the calendar entry
 
 
 class Caption(BaseModel):
@@ -209,6 +213,7 @@ def draft_caption(brief: PostBrief) -> Caption:
             "content": (
                 f"Brief: product={brief.product}, goal={brief.goal}, format={brief.format}"
                 + (f", variety={brief.variety}" if brief.variety else "")
+                + (f"\nDirection: {brief.direction}" if brief.direction else "")
             ),
         }
     ]
@@ -279,27 +284,58 @@ def _fallback_image_prompt(brief: PostBrief) -> str:
     return f"{brief.product}, close-up, fresh and steaming, appetising street-food styling"
 
 
-def creative_node(state: AgentState) -> AgentState:
-    """Drafts one caption + generates the post image for the brief in state."""
-    brief_data = state.get("brief", {})
-    errors = list(state.get("errors", []))
+def _post_time(week_start: str | None, day_offset: int) -> datetime | None:
+    """Concrete publish datetime for a calendar slot: week_start + day_offset at POST_HOUR."""
+    try:
+        base = date.fromisoformat(week_start) if week_start else date.today()
+    except (ValueError, TypeError):
+        base = date.today()
+    hour = int(os.environ.get("POST_HOUR", "10"))
+    try:
+        tz = ZoneInfo(os.environ.get("POST_TZ", "Asia/Kolkata"))
+    except ZoneInfoNotFoundError:
+        tz = timezone.utc
+    return datetime.combine(base + timedelta(days=day_offset), time(hour=hour), tzinfo=tz)
+
+
+def _calendar_briefs(state: AgentState) -> list[tuple[PostBrief, int, str | None]]:
+    """One (brief, day_offset, week_start) per calendar post; fall back to the single
+    campaign brief when there is no usable calendar (degraded-strategy safety)."""
+    strat = state.get("strategy") if isinstance(state.get("strategy"), dict) else {}
+    posts = strat.get("posts") or []
+    goal = strat.get("goal")
+    week_start = strat.get("week_start")
+
+    out: list[tuple[PostBrief, int, str | None]] = []
+    for p in posts:
+        try:
+            brief = PostBrief(
+                product=p["topic"],
+                goal=goal or "awareness",
+                format=p.get("format", "feed_post"),
+                variety=p.get("variety"),
+                direction=p.get("brief"),
+            )
+        except (KeyError, ValidationError):
+            continue
+        out.append((brief, int(p.get("day_offset", 0)), week_start))
+    if out:
+        return out
 
     try:
-        brief = PostBrief(**brief_data)
-    except ValueError as exc:
-        return {
-            **state,
-            "errors": errors + [f"Invalid post brief: {exc}"],
-            "human_review_required": True,
-            "confidence_score": 0.0,
-        }
+        return [(PostBrief(**state.get("brief", {})), 0, week_start)]
+    except ValidationError:
+        return []
 
+
+def _build_asset(
+    brief: PostBrief, day_offset: int, week_start: str | None, campaign_id: str
+) -> tuple[dict, bool, float, str | None]:
+    """Draft one post's caption + image. Returns (asset, needs_review, confidence, error)."""
     caption = draft_caption(brief)
-
-    # Never downgrade an upstream review flag (e.g. a degraded strategy run).
-    needs_review = caption.confidence < CONFIDENCE_THRESHOLD or state.get("human_review_required", False)
+    needs_review = caption.confidence < CONFIDENCE_THRESHOLD
     post = PostAsset(
-        campaign_id=state.get("campaign_id", ""),
+        campaign_id=campaign_id,
         format=brief.format,
         topic=brief.product,
         variety=brief.variety,
@@ -308,24 +344,57 @@ def creative_node(state: AgentState) -> AgentState:
         cta=caption.cta,
         image_prompt=caption.image_prompt,
         confidence=caption.confidence,
+        scheduled_at=_post_time(week_start, day_offset),
         approval_status="draft" if needs_review else "pending_approval",
     )
     asset = post.model_dump(mode="json")
     if caption.review_reason:
         asset["review_reason"] = caption.review_reason
 
+    error: str | None = None
     image_prompt = caption.image_prompt or _fallback_image_prompt(brief)
     try:
         asset["image_url"] = _render_post_image(image_prompt, post.post_id)
     except Exception as exc:  # external boundary: surface, flag for review, never ship blind
         _log.warning("Image generation failed for %s: %s", post.post_id, exc)
-        errors.append(f"{post.post_id}: image generation failed — {exc}; flagged for human review")
+        error = f"{post.post_id}: image generation failed — {exc}; flagged for human review"
         needs_review = True
+        asset["approval_status"] = "draft"
+    return asset, needs_review, caption.confidence, error
+
+
+def creative_node(state: AgentState) -> AgentState:
+    """Fan the strategy calendar out into one PostAsset per planned post (caption + image).
+
+    Each asset carries its scheduled publish time (week_start + day_offset). Falls back to
+    a single post from the campaign brief when no calendar is available."""
+    errors = list(state.get("errors", []))
+    briefs = _calendar_briefs(state)
+    if not briefs:
+        return {
+            **state,
+            "errors": errors + ["Invalid campaign brief and no calendar to fan out"],
+            "human_review_required": True,
+            "confidence_score": 0.0,
+        }
+
+    campaign_id = state.get("campaign_id", "")
+    # Never downgrade an upstream review flag (e.g. a degraded strategy run).
+    needs_review = state.get("human_review_required", False)
+    assets: list[dict] = []
+    confidences: list[float] = []
+    for brief, day_offset, week_start in briefs:
+        asset, post_review, confidence, error = _build_asset(brief, day_offset, week_start, campaign_id)
+        assets.append(asset)
+        confidences.append(confidence)
+        needs_review = needs_review or post_review
+        if error:
+            errors.append(error)
 
     return {
         **state,
-        "creative_assets": [asset],
-        "confidence_score": caption.confidence,
+        "creative_assets": assets,
+        "confidence_score": min(confidences) if confidences else 0.0,
         "human_review_required": needs_review,
         "errors": errors,
     }
